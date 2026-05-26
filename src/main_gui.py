@@ -20,8 +20,10 @@ class SmartPharmaApp(ctk.CTk):
         self.title("LabRFID Smart Pharma - CustomTkinter")
         self.geometry("1100x700")
 
+        import sys
+        default_port = "/dev/cu.usbserial-1110" if sys.platform == "darwin" else "COM3"
         self.middleware = Middleware()
-        self.reader_manager = ReaderManager()
+        self.reader_manager = ReaderManager(port=default_port)
         
         self.current_read_point = "PACKAGING_LINE"
         self.is_monitoring = False
@@ -43,8 +45,8 @@ class SmartPharmaApp(ctk.CTk):
         self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Smart Pharma", font=ctk.CTkFont(size=20, weight="bold"))
         self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 10))
 
-        self.port_entry = ctk.CTkEntry(self.sidebar_frame, placeholder_text="Porta COM (es. COM3)")
-        self.port_entry.insert(0, "COM3")
+        self.port_entry = ctk.CTkEntry(self.sidebar_frame, placeholder_text=f"Porta COM (es. {default_port})")
+        self.port_entry.insert(0, default_port)
         self.port_entry.grid(row=1, column=0, padx=20, pady=10)
 
         self.connect_btn = ctk.CTkButton(self.sidebar_frame, text="Connetti Reader", command=self.toggle_connection)

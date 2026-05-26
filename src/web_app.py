@@ -1,5 +1,7 @@
 import asyncio
+import collections
 import json
+import logging
 import os
 import sys
 from typing import List
@@ -15,18 +17,55 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.reader_module import ReaderManager
 from src.middleware import Middleware
 
+# Custom Log Handler to capture logs for the Web UI
+class DequeHandler(logging.Handler):
+    def __init__(self, maxlen=100):
+        super().__init__()
+        self.logs = collections.deque(maxlen=maxlen)
+        self.main_loop = None
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            self.logs.append(msg)
+            if self.main_loop and self.main_loop.is_running():
+                self.main_loop.call_soon_threadsafe(
+                    lambda: asyncio.create_task(manager.broadcast(json.dumps({
+                        "type": "new_system_log",
+                        "log": msg,
+                        "level": record.levelname
+                    })))
+                )
+        except Exception:
+            pass
+
+deque_handler = DequeHandler()
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+deque_handler.setFormatter(formatter)
+logging.getLogger("src.reader_module").addHandler(deque_handler)
+logging.getLogger("src.tertium_serial_handler").addHandler(deque_handler)
+logging.getLogger("src.reader_module").setLevel(logging.INFO)
+logging.getLogger("src.tertium_serial_handler").setLevel(logging.INFO)
+
 app = FastAPI()
+
+@app.on_event("startup")
+async def startup_event():
+    deque_handler.main_loop = asyncio.get_running_loop()
 
 # Setup static files and templates
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
 
 # Global State
+default_port = "/dev/cu.usbserial-1110" if sys.platform == "darwin" else "COM3"
 middleware = Middleware()
-reader_manager = ReaderManager(port="COM3")
+reader_manager = ReaderManager(port=default_port)
 current_read_point = "PACKAGING_LINE"
 is_monitoring = False
 periodic_task = None
+active_batch_config = None
+processed_in_batch = set()
 
 # WebSocket Connection Manager
 class ConnectionManager:
@@ -68,8 +107,10 @@ async def send_state_update():
         "read_point": current_read_point,
         "is_monitoring": is_monitoring,
         "is_connected": reader_manager.is_connected,
+        "batch_active": active_batch_config is not None,
         "kpis": get_kpis(),
-        "events": middleware.get_all_events()[-50:] # Send last 50 events
+        "events": middleware.get_all_events()[-50:], # Send last 50 events
+        "system_logs": list(deque_handler.logs) # Send the buffer of logs
     }
     await manager.broadcast(json.dumps(state))
 
@@ -84,27 +125,76 @@ def handle_async_read(tag_payload):
     })))
     asyncio.run(send_state_update())
 
+from src.epc_encoder import encode_sgtin96
+
 async def periodic_scan_loop():
-    while is_monitoring and current_read_point in ["SMART_TRUCK", "SMART_CABINET"]:
-        raw_tags = reader_manager.read_tags()
-        if raw_tags:
-            results = middleware.process_reads(raw_tags, current_read_point)
-            await manager.broadcast(json.dumps({
-                "type": "scan_results",
-                "results": results
-            }))
-            await send_state_update()
-        await asyncio.sleep(3)
+    global processed_in_batch
+    while is_monitoring:
+        if current_read_point == "PACKAGING_LINE" and active_batch_config:
+            raw_tags = reader_manager.read_tags()
+            if raw_tags:
+                for tag in raw_tags:
+                    # Skip if this tag has already been processed in the current batch run
+                    if tag in processed_in_batch:
+                        continue
+                        
+                    # Also skip if the tag already contains an EPC that is registered in our DB for this batch
+                    asset = middleware.state_machine.get_asset(tag)
+                    if asset and asset.get("batch") == active_batch_config.get("batch"):
+                        processed_in_batch.add(tag)
+                        continue
+                        
+                    serial = middleware.state_machine.serial_counter
+                    new_epc_hex = encode_sgtin96(
+                        active_batch_config.get("gtin", ""), 
+                        serial, prefix_length=7
+                    )
+                    # Scrittura fisica
+                    retcode = reader_manager.reader.write_memory(
+                        epc=tag, data=new_epc_hex, mem_bank="01", address="02", block_num="06", timeout_ms=1000
+                    )
+                    if retcode == "00":
+                        # Mark both the old and new EPCs as processed to prevent loop writing
+                        processed_in_batch.add(tag)
+                        processed_in_batch.add(new_epc_hex)
+                        
+                        res = middleware.state_machine.commission_asset(
+                            epc=new_epc_hex, gtin=active_batch_config.get("gtin"), 
+                            batch=active_batch_config.get("batch"), expiry_date=active_batch_config.get("expiry"),
+                            aic=active_batch_config.get("aic"), old_epc=tag
+                        )
+                        await manager.broadcast(json.dumps({"type": "scan_results", "results": [res]}))
+                        await send_state_update()
+            await asyncio.sleep(0.5) # Polling veloce per il nastro trasportatore
+            
+        elif current_read_point in ["SMART_TRUCK", "SMART_CABINET"]:
+            raw_tags = reader_manager.read_tags()
+            if raw_tags:
+                results = middleware.process_reads(raw_tags, current_read_point)
+                await manager.broadcast(json.dumps({
+                    "type": "scan_results",
+                    "results": results
+                }))
+                await send_state_update()
+            await asyncio.sleep(3) # Polling lento per l'inventario
+        else:
+            break
 
 # --- ROUTES ---
 
 @app.get("/", response_class=HTMLResponse)
 async def get_dashboard(request: Request):
-    return templates.TemplateResponse(request=request, name="index.html")
+    context = {"request": request, "default_port": default_port}
+    try:
+        # Starlette >= 0.28.0 (FastAPI >= 0.100.0)
+        return templates.TemplateResponse(request=request, name="index.html", context=context)
+    except TypeError:
+        # Starlette < 0.28.0 (FastAPI < 0.100.0)
+        return templates.TemplateResponse("index.html", context)
 
 @app.post("/api/connect")
 async def toggle_connection(data: dict):
-    port = data.get("port", "COM3")
+    port = data.get("port", default_port)
     if reader_manager.is_connected:
         global is_monitoring
         is_monitoring = False
@@ -118,11 +208,12 @@ async def toggle_connection(data: dict):
 
 @app.post("/api/read_point")
 async def set_read_point(data: dict):
-    global current_read_point, is_monitoring
+    global current_read_point, is_monitoring, active_batch_config
     current_read_point = data.get("read_point", "PACKAGING_LINE")
     
     # Stop monitoring on context switch
     is_monitoring = False
+    active_batch_config = None
     reader_manager.stop_async_reading()
     if reader_manager.is_connected:
         reader_manager.configure_for_read_point(current_read_point)
@@ -149,6 +240,45 @@ async def toggle_monitor():
         reader_manager.stop_async_reading()
         # periodic_task will stop on its next loop due to `is_monitoring == False`
         
+    await send_state_update()
+    return {"status": "success"}
+
+@app.post("/api/start_batch")
+async def start_batch(data: dict):
+    global active_batch_config, is_monitoring, periodic_task, processed_in_batch
+    
+    if not reader_manager.is_connected:
+        return {"status": "error", "message": "Reader non connesso."}
+        
+    active_batch_config = data
+    offset = data.get("serial_offset")
+    if offset:
+        middleware.state_machine.set_serial_counter(offset)
+        
+    # Reset processed tags set and populate with existing ones in DB for the same batch
+    processed_in_batch = set()
+    batch_name = data.get("batch")
+    if batch_name:
+        for epc, asset in middleware.state_machine.assets.items():
+            if asset.get("batch") == batch_name:
+                processed_in_batch.add(epc)
+                if asset.get("oldEpc"):
+                    processed_in_batch.add(asset.get("oldEpc"))
+        
+    is_monitoring = True
+    reader_manager.stop_async_reading()
+    # Force polling mode (00) for continuous safe write
+    reader_manager.reader.set_current_mode(mode="00")
+    
+    periodic_task = asyncio.create_task(periodic_scan_loop())
+    await send_state_update()
+    return {"status": "success"}
+
+@app.post("/api/stop_batch")
+async def stop_batch():
+    global active_batch_config, is_monitoring
+    active_batch_config = None
+    is_monitoring = False
     await send_state_update()
     return {"status": "success"}
 

@@ -10,6 +10,8 @@ function connectWebSocket() {
             updateState(data);
         } else if (data.type === 'scan_results') {
             renderScanResults(data.results);
+        } else if (data.type === 'new_system_log') {
+            appendSystemLog(data.log, data.level);
         }
     };
 
@@ -22,6 +24,14 @@ function updateState(state) {
     // Update theme/context
     document.body.setAttribute('data-context', state.read_point);
     document.getElementById('readPointSelect').value = state.read_point;
+    
+    // Toggle Commission Form visibility
+    const commissionForm = document.getElementById('commission-form');
+    if (state.read_point === 'PACKAGING_LINE') {
+        commissionForm.style.display = 'block';
+    } else {
+        commissionForm.style.display = 'none';
+    }
     
     // Update Header
     document.getElementById('context-title').innerText = state.read_point.replace('_', ' ');
@@ -36,14 +46,34 @@ function updateState(state) {
         btnConnect.classList.remove('danger');
     }
 
-    // Update Monitor Button
+    // Update Monitor Button (hide it if we are in PACKAGING_LINE because we use the Conveyor controls instead)
     const btnMonitor = document.getElementById('btn-monitor');
-    if (state.is_monitoring) {
-        btnMonitor.innerText = "⏹ Stop Monitoring";
-        btnMonitor.classList.add('danger');
+    if (state.read_point === 'PACKAGING_LINE') {
+        btnMonitor.style.display = 'none';
+        
+        // Update Belt Controls
+        if (state.batch_active) {
+            document.getElementById('btn-start-batch').style.display = 'none';
+            document.getElementById('btn-stop-batch').style.display = 'block';
+            document.getElementById('belt-status-indicator').style.display = 'flex';
+            // Disable inputs
+            document.querySelectorAll('#commission-form input').forEach(i => i.disabled = true);
+        } else {
+            document.getElementById('btn-start-batch').style.display = 'block';
+            document.getElementById('btn-stop-batch').style.display = 'none';
+            document.getElementById('belt-status-indicator').style.display = 'none';
+            // Enable inputs
+            document.querySelectorAll('#commission-form input').forEach(i => i.disabled = false);
+        }
     } else {
-        btnMonitor.innerText = "▶ Start Monitoring";
-        btnMonitor.classList.remove('danger');
+        btnMonitor.style.display = 'flex'; // show the generic monitor button
+        if (state.is_monitoring) {
+            btnMonitor.innerText = "⏹ Stop Monitoring";
+            btnMonitor.classList.add('danger');
+        } else {
+            btnMonitor.innerText = "▶ Start Monitoring";
+            btnMonitor.classList.remove('danger');
+        }
     }
 
     // Render KPIs based on context
@@ -51,6 +81,25 @@ function updateState(state) {
 
     // Render Event Log
     renderLog(state.events);
+
+    // Render system logs if present
+    if (state.system_logs) {
+        const consoleBody = document.getElementById('console-body');
+        if (consoleBody) {
+            consoleBody.innerHTML = '';
+            state.system_logs.forEach(logLine => {
+                let level = "INFO";
+                if (logLine.includes(" - WARNING - ")) level = "WARNING";
+                else if (logLine.includes(" - ERROR - ")) level = "ERROR";
+                
+                const entry = document.createElement('div');
+                entry.className = `log-entry ${level}`;
+                entry.innerText = logLine;
+                consoleBody.appendChild(entry);
+            });
+            consoleBody.scrollTop = consoleBody.scrollHeight;
+        }
+    }
 }
 
 function renderKPIs(kpis, context) {
@@ -173,6 +222,37 @@ async function changeReadPoint() {
 
 async function toggleMonitor() {
     await fetch('/api/monitor', { method: 'POST' });
+}
+
+async function startBatch() {
+    const gtin = document.getElementById('inp-gtin').value;
+    const batch = document.getElementById('inp-batch').value;
+    const expiry = document.getElementById('inp-expiry').value;
+    const aic = document.getElementById('inp-aic').value;
+    const serial_offset = document.getElementById('inp-offset').value;
+    
+    await fetch('/api/start_batch', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ gtin, batch, expiry, aic, serial_offset })
+    });
+}
+
+async function stopBatch() {
+    await fetch('/api/stop_batch', { method: 'POST' });
+}
+
+function appendSystemLog(logText, level = "INFO") {
+    const consoleBody = document.getElementById('console-body');
+    if (!consoleBody) return;
+    
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${level}`;
+    entry.innerText = logText;
+    consoleBody.appendChild(entry);
+    
+    // Auto-scroll to bottom
+    consoleBody.scrollTop = consoleBody.scrollHeight;
 }
 
 // Init

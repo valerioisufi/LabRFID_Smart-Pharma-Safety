@@ -12,6 +12,7 @@ class StateMachine:
     def __init__(self):
         self.assets = {}
         self.events = []
+        self.serial_counter = 1
         self.load_db()
 
     def load_db(self):
@@ -25,10 +26,12 @@ class StateMachine:
                 data = json.load(f)
                 self.assets = data.get("assets", {})
                 self.events = data.get("events", [])
+                self.serial_counter = data.get("serialCounter", 1)
         except Exception as e:
             logger.error(f"Error loading DB: {e}")
             self.assets = {}
             self.events = []
+            self.serial_counter = 1
 
     def save_db(self):
         try:
@@ -37,7 +40,8 @@ class StateMachine:
             with open(DB_PATH, "w") as f:
                 json.dump({
                     "assets": self.assets,
-                    "events": self.events
+                    "events": self.events,
+                    "serialCounter": self.serial_counter
                 }, f, indent=2)
         except Exception as e:
             logger.error(f"Error saving DB: {e}")
@@ -52,16 +56,12 @@ class StateMachine:
         """
         asset = self.get_asset(epc)
         
-        # If asset doesn't exist and we are in PACKAGING_LINE, we create it.
         if not asset:
-            if read_point == "PACKAGING_LINE":
-                return self._create_asset(epc)
-            else:
-                return {
-                    "status": "ALERT",
-                    "message": f"Asset {epc} sconosciuto letto al {read_point}.",
-                    "asset": None
-                }
+            return {
+                "status": "ALERT",
+                "message": f"Asset sconosciuto ({epc}). Forse un tag non commissionato?",
+                "asset": None
+            }
 
         # Asset exists. Check rules.
         current_state = asset.get("currentState")
@@ -122,23 +122,34 @@ class StateMachine:
             "asset": asset
         }
 
-    def _create_asset(self, epc):
-        """Mock creation of a new asset at the packaging line."""
+    def set_serial_counter(self, offset):
+        try:
+            self.serial_counter = int(offset)
+            self.save_db()
+        except ValueError:
+            pass
+
+    def commission_asset(self, epc, gtin, batch, expiry_date, aic, old_epc=None):
+        """Official Commissioning with SGTIN-96 encoding and GS1 metadata."""
         new_asset = {
             "epc": epc,
-            "tid": f"TID-{uuid.uuid4().hex[:12].upper()}",
-            "batch": "B-NEW",
-            "expiryDate": (datetime.datetime.now() + datetime.timedelta(days=365)).strftime("%Y-%m-%d"),
-            "nationalId": str(uuid.uuid4().int)[:6],
+            "gtin": gtin,
+            "batch": batch,
+            "expiryDate": expiry_date,
+            "aic": aic,
+            "serialNumber": self.serial_counter,
             "currentState": "PACKED",
-            "lastUpdate": datetime.datetime.utcnow().isoformat() + "Z"
+            "lastUpdate": datetime.datetime.utcnow().isoformat() + "Z",
+            "oldEpc": old_epc
         }
+        
         self.assets[epc] = new_asset
+        self.serial_counter += 1
         self._log_event(epc, "PACKAGING_LINE", "COMMISSIONING", "PACKED", [])
         self.save_db()
         return {
             "status": "OK",
-            "message": "Nuovo asset registrato.",
+            "message": "Asset commissionato e registrato su RFID fisico.",
             "asset": new_asset
         }
 

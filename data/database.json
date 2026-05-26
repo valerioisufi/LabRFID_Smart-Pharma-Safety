@@ -1,140 +1,27 @@
 {
   "assets": {
-    "PHARMA-0001": {
-      "epc": "PHARMA-0001",
-      "tid": "E280110C20000001",
-      "batch": "B-VALID",
-      "expiryDate": "2020-01-01",
-      "nationalId": "038548",
+    "303436F06C2C9B8000000001": {
+      "epc": "303436F06C2C9B8000000001",
+      "gtin": "00900123456789",
+      "batch": "B-2026-A",
+      "expiryDate": "2027-12-31",
+      "aic": "012345678",
+      "serialNumber": 1,
       "currentState": "PACKED",
-      "lastUpdate": "2026-05-26T08:34:19.278464Z"
-    },
-    "PHARMA-0002": {
-      "epc": "PHARMA-0002",
-      "tid": "E280110C20000002",
-      "batch": "B-BLACKLISTED",
-      "expiryDate": "2028-12-31",
-      "nationalId": "038549",
-      "currentState": "IN_CABINET",
-      "lastUpdate": "2026-05-25T10:15:30Z"
-    },
-    "PHARMA-0003": {
-      "epc": "PHARMA-0003",
-      "tid": "E280110C20000003",
-      "batch": "B-VALID",
-      "expiryDate": "2024-01-01",
-      "nationalId": "038550",
-      "currentState": "PACKED",
-      "lastUpdate": "2026-05-26T08:34:19.280342Z"
-    },
-    "E2801190A5030061705DC15B": {
-      "epc": "E2801190A5030061705DC15B",
-      "tid": "TID-0E08C2A18995",
-      "batch": "B-BLACKLISTED",
-      "expiryDate": "2027-05-26",
-      "nationalId": "665072",
-      "currentState": "DISPOSED",
-      "lastUpdate": "2026-05-26T08:39:32.786529Z"
+      "lastUpdate": "2026-05-26T13:43:21.313202Z",
+      "oldEpc": "303430D5EC2C9B8000001B59"
     }
   },
   "events": [
     {
-      "eventId": "e83c7690-c68f-46ef-bbf7-36b541c294ed",
-      "epc": "PHARMA-0001",
-      "timestamp": "2026-05-26T08:34:19.278571Z",
+      "eventId": "78b9e0a0-8c16-4d6f-a196-70cce2312907",
+      "epc": "303436F06C2C9B8000000001",
+      "timestamp": "2026-05-26T13:43:21.313601Z",
       "readPoint": "PACKAGING_LINE",
       "action": "COMMISSIONING",
       "newState": "PACKED",
       "alerts": []
-    },
-    {
-      "eventId": "a93c3f97-3c68-4341-a078-876488e151a4",
-      "epc": "PHARMA-0003",
-      "timestamp": "2026-05-26T08:34:19.280384Z",
-      "readPoint": "PACKAGING_LINE",
-      "action": "COMMISSIONING",
-      "newState": "PACKED",
-      "alerts": [
-        "FARMACO SCADUTO!"
-      ]
-    },
-    {
-      "eventId": "91aa1505-3083-416e-897a-cf2b312438c2",
-      "epc": "E2801190A5030061705DC15B",
-      "timestamp": "2026-05-26T08:36:24.662293Z",
-      "readPoint": "PACKAGING_LINE",
-      "action": "COMMISSIONING",
-      "newState": "PACKED",
-      "alerts": []
-    },
-    {
-      "eventId": "587644e3-0833-4c99-b109-a0ac363c5cb6",
-      "epc": "E2801190A5030061705DC15B",
-      "timestamp": "2026-05-26T08:36:45.381865Z",
-      "readPoint": "PACKAGING_LINE",
-      "action": "COMMISSIONING",
-      "newState": "PACKED",
-      "alerts": []
-    },
-    {
-      "eventId": "f349acf0-74d2-4e24-b2be-b5ccc94e427f",
-      "epc": "E2801190A5030061705DC15B",
-      "timestamp": "2026-05-26T08:37:16.483250Z",
-      "readPoint": "SMART_TRUCK",
-      "action": "DISTRIBUTE",
-      "newState": "IN_TRANSIT",
-      "alerts": []
-    },
-    {
-      "eventId": "c8bf29ed-a6cf-44c4-8e57-dc354393c76b",
-      "epc": "E2801190A5030061705DC15B",
-      "timestamp": "2026-05-26T08:37:37.112960Z",
-      "readPoint": "SMART_CABINET",
-      "action": "STORE",
-      "newState": "IN_CABINET",
-      "alerts": []
-    },
-    {
-      "eventId": "85a8c36c-0c39-4750-a15f-fa04c1665aa4",
-      "epc": "E2801190A5030061705DC15B",
-      "timestamp": "2026-05-26T08:38:03.323682Z",
-      "readPoint": "SMART_CABINET",
-      "action": "STORE",
-      "newState": "IN_CABINET",
-      "alerts": []
-    },
-    {
-      "eventId": "38a64180-bd10-4569-97b0-354be4f79e24",
-      "epc": "E2801190A5030061705DC15B",
-      "timestamp": "2026-05-26T08:38:34.230221Z",
-      "readPoint": "SMART_CABINET",
-      "action": "STORE",
-      "newState": "IN_CABINET",
-      "alerts": [
-        "LOTTO RITIRATO (BLACKLIST)!"
-      ]
-    },
-    {
-      "eventId": "9d1fdfa2-8a3e-4bc4-acbf-b6da0f3f3499",
-      "epc": "E2801190A5030061705DC15B",
-      "timestamp": "2026-05-26T08:38:53.068668Z",
-      "readPoint": "DESK",
-      "action": "DISPENSE",
-      "newState": "DISPENSED",
-      "alerts": [
-        "LOTTO RITIRATO (BLACKLIST)!"
-      ]
-    },
-    {
-      "eventId": "41b2ca31-9b82-4d6a-aa74-a5ccdef5a302",
-      "epc": "E2801190A5030061705DC15B",
-      "timestamp": "2026-05-26T08:39:32.786609Z",
-      "readPoint": "WASTE_CONTAINER",
-      "action": "DISPOSE",
-      "newState": "DISPOSED",
-      "alerts": [
-        "LOTTO RITIRATO (BLACKLIST)!"
-      ]
     }
-  ]
+  ],
+  "serialCounter": 2
 }

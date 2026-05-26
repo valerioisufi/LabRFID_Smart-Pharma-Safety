@@ -38,7 +38,7 @@ class TertiumReader:
     RET_SUCCESS = "00"
     RET_TIMEOUT = "0D"
 
-    def __init__(self, port, baudrate=38400, timeout=1, rssi_enabled=False, logger=None):
+    def __init__(self, port, baudrate=38400, timeout=3, rssi_enabled=False, logger=None):
         """
         Initializes the reader. Accepts an optional logger instance.
         """
@@ -138,6 +138,8 @@ class TertiumReader:
         if not self.ser or not self.ser.is_open:
             raise TertiumConnectionError("Port is not open.")
 
+        # Clear stale data in the serial buffer before writing command
+        self.ser.reset_input_buffer()
         
         frame = self._calculate_frame(cmd_code, params)
         self.ser.write(frame)

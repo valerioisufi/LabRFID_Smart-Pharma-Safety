@@ -12,7 +12,10 @@ logger = logging.getLogger(__name__)
 
 class ReaderManager:
     """Hardware Abstraction Layer managing the reader connection."""
-    def __init__(self, port="COM3"):
+    def __init__(self, port=None):
+        import sys
+        if port is None:
+            port = "/dev/cu.usbserial-1110" if sys.platform == "darwin" else "COM3"
         self.port = port
         self.reader = None
         self.async_thread = None
@@ -85,3 +88,37 @@ class ReaderManager:
         if tags and isinstance(tags[0], tuple):
             return [t[0] for t in tags]
         return tags
+
+    def write_new_epc(self, new_epc_hex: str):
+        """
+        Reads the first available tag in range, and overwrites its EPC memory
+        with the new SGTIN-96 EPC.
+        """
+        if not self.reader or not self.is_connected:
+            return False, "Reader not connected"
+            
+        # First, find a tag to write to
+        tags = self.read_tags()
+        if not tags:
+            return False, "Nessun tag fisico rilevato nel raggio d'azione."
+            
+        target_epc = tags[0]
+        
+        try:
+            # write_memory args: epc, data, mem_bank="01" (EPC), address="02" (Word 2), block_num="06" (6 words = 96 bits)
+            retcode = self.reader.write_memory(
+                epc=target_epc, 
+                data=new_epc_hex, 
+                mem_bank="01", 
+                address="02", 
+                block_num="06", 
+                timeout_ms=2000
+            )
+            
+            if retcode == "00":
+                return True, target_epc # Return the old EPC just for reference
+            else:
+                return False, f"Errore scrittura (Retcode: {retcode})"
+        except Exception as e:
+            logger.error(f"Write error: {e}")
+            return False, str(e)
