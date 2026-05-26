@@ -44,6 +44,10 @@ body {
     border-right: 1px solid var(--border);
     background: rgba(15, 23, 42, 0.95);
     z-index: 10;
+    /* Force dark-mode typography variables inside the sidebar */
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    color: var(--text-primary);
 }
 
 .logo {
@@ -222,7 +226,7 @@ h1 {
 /* Table */
 .table-container {
     flex: 1;
-    min-height: 250px;
+    min-height: 400px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;

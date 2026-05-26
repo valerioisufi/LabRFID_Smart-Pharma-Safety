@@ -114,16 +114,23 @@ async def send_state_update():
     }
     await manager.broadcast(json.dumps(state))
 
-def handle_async_read(tag_payload):
-    epc = tag_payload[0] if isinstance(tag_payload, tuple) else tag_payload
+async def process_and_broadcast_async_read(epc):
     results = middleware.process_reads([epc], current_read_point)
-    
-    # Broadcast results and new state
-    asyncio.run(manager.broadcast(json.dumps({
+    await manager.broadcast(json.dumps({
         "type": "scan_results",
         "results": results
-    })))
-    asyncio.run(send_state_update())
+    }))
+    await send_state_update()
+
+def handle_async_read(tag_payload):
+    epc = tag_payload[0] if isinstance(tag_payload, tuple) else tag_payload
+    
+    # Safely schedule on the main event loop from the background thread
+    loop = deque_handler.main_loop
+    if loop and loop.is_running():
+        loop.call_soon_threadsafe(
+            lambda: asyncio.create_task(process_and_broadcast_async_read(epc))
+        )
 
 from src.epc_encoder import encode_sgtin96
 

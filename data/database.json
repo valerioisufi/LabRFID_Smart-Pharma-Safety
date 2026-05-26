@@ -10,6 +10,17 @@
       "currentState": "PACKED",
       "lastUpdate": "2026-05-26T13:43:21.313202Z",
       "oldEpc": "303430D5EC2C9B8000001B59"
+    },
+    "303430D5EC2C9B8000000002": {
+      "epc": "303430D5EC2C9B8000000002",
+      "gtin": "00800123456789",
+      "batch": "B-2026-X",
+      "expiryDate": "2027-12-31",
+      "aic": "012345678",
+      "serialNumber": 2,
+      "currentState": "IN_CABINET",
+      "lastUpdate": "2026-05-26T13:48:23.382042Z",
+      "oldEpc": "303430D5EC2C9B8000001B59"
     }
   },
   "events": [
@@ -21,7 +32,34 @@
       "action": "COMMISSIONING",
       "newState": "PACKED",
       "alerts": []
+    },
+    {
+      "eventId": "f85632f3-b5a8-4d62-a58c-aa3836ca01dc",
+      "epc": "303430D5EC2C9B8000000002",
+      "timestamp": "2026-05-26T13:47:58.922122Z",
+      "readPoint": "PACKAGING_LINE",
+      "action": "COMMISSIONING",
+      "newState": "PACKED",
+      "alerts": []
+    },
+    {
+      "eventId": "2b932a83-173d-4ef1-8ecc-a7c95d0fd442",
+      "epc": "303430D5EC2C9B8000000002",
+      "timestamp": "2026-05-26T13:48:11.982560Z",
+      "readPoint": "SMART_TRUCK",
+      "action": "DISTRIBUTE",
+      "newState": "IN_TRANSIT",
+      "alerts": []
+    },
+    {
+      "eventId": "1495babb-6864-4f83-9323-6020882b73aa",
+      "epc": "303430D5EC2C9B8000000002",
+      "timestamp": "2026-05-26T13:48:23.382204Z",
+      "readPoint": "SMART_CABINET",
+      "action": "STORE",
+      "newState": "IN_CABINET",
+      "alerts": []
     }
   ],
-  "serialCounter": 2
+  "serialCounter": 3
 }

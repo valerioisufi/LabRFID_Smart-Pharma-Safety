@@ -1,4 +1,4 @@
 # Lab RFID - Smart Pharma Safety
 
 Per avviare il simulatore:
-`streamlit run src/app.py`
+`python src/web_app.py`

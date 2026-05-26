@@ -189,7 +189,7 @@ function renderLog(events) {
         if (isAlert) tr.className = 'row-alert';
         
         tr.innerHTML = `
-            <td>${e.timestamp.split('T')[1].split('.')[0]}</td>
+            <td>${new Date(e.timestamp).toLocaleTimeString()}</td>
             <td>${e.epc}</td>
             <td>${e.readPoint}</td>
             <td>${e.action}</td>
