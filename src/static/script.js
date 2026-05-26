@@ -202,7 +202,7 @@ function renderLog(events) {
 
 // API Calls
 async function toggleConnection() {
-    const port = document.getElementById('portInput').value;
+    const port = document.getElementById('portSelect').value;
     await fetch('/api/connect', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -255,5 +255,44 @@ function appendSystemLog(logText, level = "INFO") {
     consoleBody.scrollTop = consoleBody.scrollHeight;
 }
 
+async function loadAvailablePorts() {
+    try {
+        const response = await fetch('/api/ports');
+        const data = await response.json();
+        const select = document.getElementById('portSelect');
+        if (!select) return;
+        
+        select.innerHTML = ''; // Clear
+        
+        if (data.ports.length === 0) {
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.innerText = 'Nessuna porta rilevata';
+            select.appendChild(opt);
+            return;
+        }
+        
+        let selectedIndex = 0;
+        data.ports.forEach((port, idx) => {
+            const opt = document.createElement('option');
+            opt.value = port;
+            opt.innerText = port;
+            select.appendChild(opt);
+            
+            // Prefer FTDI/USB serial ports or matching cu.usbserial on macOS
+            if (port.includes('usbserial') || port.includes('ttyUSB') || port.includes('COM3')) {
+                selectedIndex = idx;
+            }
+        });
+        
+        select.selectedIndex = selectedIndex;
+    } catch (error) {
+        console.error("Error loading ports:", error);
+    }
+}
+
 // Init
-window.onload = connectWebSocket;
+window.onload = function() {
+    connectWebSocket();
+    loadAvailablePorts();
+};

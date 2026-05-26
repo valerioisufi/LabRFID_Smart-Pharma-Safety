@@ -18,7 +18,10 @@
         
         <div class="control-group">
             <label>Hardware Port</label>
-            <input type="text" id="portInput" value="{{ default_port }}">
+            <div style="display: flex; gap: 8px; width: 100%;">
+                <select id="portSelect" style="flex: 1; min-width: 0; padding: 12px;"></select>
+                <button onclick="loadAvailablePorts()" style="flex-shrink: 0; padding: 12px; width: 44px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px;" title="Ricarica porte">🔄</button>
+            </div>
             <button id="btn-connect" onclick="toggleConnection()">🔌 Connect Reader</button>
         </div>
 

@@ -187,7 +187,12 @@ async def periodic_scan_loop():
         else:
             break
 
-# --- ROUTES ---
+import serial.tools.list_ports
+
+@app.get("/api/ports")
+def get_available_ports():
+    ports = [p.device for p in serial.tools.list_ports.comports()]
+    return {"ports": ports}
 
 @app.get("/", response_class=HTMLResponse)
 async def get_dashboard(request: Request):
