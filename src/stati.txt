@@ -19,6 +19,3 @@
 # WASTE CONTAINER
 # cestino con piano di appoggio che si apre dopo la lettura del prodotto appoggiato su di esso
 # il tag passa allo stato DISPOSED
-
-
-
