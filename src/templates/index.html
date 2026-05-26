@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Pharma Safety</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body data-context="PACKAGING_LINE">
+    <div class="glow"></div>
+
+    <!-- SIDEBAR -->
+    <aside id="sidebar">
+        <div class="logo">
+            <span style="font-size: 28px;">🛡️</span> Smart Pharma
+        </div>
+        
+        <div class="control-group">
+            <label>Hardware Port</label>
+            <input type="text" id="portInput" value="COM3">
+            <button id="btn-connect" onclick="toggleConnection()">🔌 Connect Reader</button>
+        </div>
+
+        <div class="control-group" style="margin-top: 20px;">
+            <label>Active Read Point</label>
+            <select id="readPointSelect" onchange="changeReadPoint()">
+                <option value="PACKAGING_LINE">📦 Packaging Line</option>
+                <option value="SMART_TRUCK">🚛 Smart Truck</option>
+                <option value="SMART_CABINET">🏥 Smart Cabinet</option>
+                <option value="DESK">⚕️ Pharmacy Desk</option>
+                <option value="WASTE_CONTAINER">🗑️ Waste Container</option>
+            </select>
+        </div>
+
+        <div class="control-group" style="margin-top: 20px;">
+            <label>Reading Engine</label>
+            <button id="btn-monitor" onclick="toggleMonitor()">▶ Start Monitoring</button>
+            <p style="font-size: 11px; color: var(--text-secondary); margin-top: 8px;">
+                Automated RFID polling via WebSockets.
+            </p>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main id="main-content">
+        <header>
+            <div>
+                <label>Current Context</label>
+                <h1 id="context-title">PACKAGING LINE</h1>
+            </div>
+        </header>
+
+        <!-- Dynamic KPIs -->
+        <section id="kpi-container"></section>
+
+        <!-- Latest Scan Results (Cards) -->
+        <div>
+            <label style="margin-bottom: 16px; display: block;">Latest Scans</label>
+            <section id="results-container"></section>
+        </div>
+
+        <!-- History Log Table -->
+        <div class="table-container glass-panel">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>EPC</th>
+                        <th>Read Point</th>
+                        <th>Action</th>
+                        <th>State</th>
+                        <th>Alerts</th>
+                    </tr>
+                </thead>
+                <tbody id="log-body">
+                    <!-- JS fills this -->
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>

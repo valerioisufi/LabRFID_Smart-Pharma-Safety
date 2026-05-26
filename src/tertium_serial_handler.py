@@ -516,8 +516,9 @@ class TertiumReader:
                                  If None, the tag will just be printed in the logs.
         """
         self.logger.info("Listening for asynchronous data... (Press Ctrl+C to stop)")
+        self._stop_listening = False
         try:
-            while True:
+            while not self._stop_listening:
                 if self.ser.in_waiting > 0:
                     try:
                         line = self.ser.read_until(b'\r').decode('ascii').strip()
@@ -543,3 +544,7 @@ class TertiumReader:
                 
         except KeyboardInterrupt:
             self.logger.info("Asynchronous listening stopped by the user.")
+            
+    def stop_listening(self):
+        """Signals the async listener loop to stop."""
+        self._stop_listening = True
