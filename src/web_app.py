@@ -5,6 +5,7 @@ import logging
 import os
 import sys
 from typing import List
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse
@@ -47,11 +48,12 @@ logging.getLogger("src.tertium_serial_handler").addHandler(deque_handler)
 logging.getLogger("src.reader_module").setLevel(logging.INFO)
 logging.getLogger("src.tertium_serial_handler").setLevel(logging.INFO)
 
-app = FastAPI()
-
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     deque_handler.main_loop = asyncio.get_running_loop()
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 # Setup static files and templates
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
