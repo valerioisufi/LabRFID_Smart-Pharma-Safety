@@ -267,7 +267,7 @@ async function loadAvailablePorts() {
         if (data.ports.length === 0) {
             const opt = document.createElement('option');
             opt.value = '';
-            opt.innerText = 'Nessuna porta rilevata';
+            opt.innerText = 'No port detected';
             select.appendChild(opt);
             return;
         }

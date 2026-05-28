@@ -262,7 +262,7 @@ async def start_batch(data: dict):
     global active_batch_config, is_monitoring, periodic_task, processed_in_batch
     
     if not reader_manager.is_connected:
-        return {"status": "error", "message": "Reader non connesso."}
+        return {"status": "error", "message": "Reader not connected."}
         
     active_batch_config = data
     offset = data.get("serial_offset")

@@ -20,7 +20,7 @@
             <label>Hardware Port</label>
             <div style="display: flex; gap: 8px; width: 100%;">
                 <select id="portSelect" style="flex: 1; min-width: 0; padding: 12px;"></select>
-                <button onclick="loadAvailablePorts()" style="flex-shrink: 0; padding: 12px; width: 44px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px;" title="Ricarica porte">🔄</button>
+                <button onclick="loadAvailablePorts()" style="flex-shrink: 0; padding: 12px; width: 44px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px;" title="Reload ports">🔄</button>
             </div>
             <button id="btn-connect" onclick="toggleConnection()">🔌 Connect Reader</button>
         </div>
@@ -67,18 +67,18 @@
 
         <!-- Packaging Line Commissioning Form -->
         <div id="commission-form" class="glass-panel" style="display: none; padding: 24px; margin-bottom: 24px;">
-            <h3 style="margin-bottom: 16px;">Conveyor Belt: Auto-Commissioning Setup</h3>
+            <h3 style="margin-bottom: 16px;">Automated Tag Provisioning</h3>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
                 <div class="control-group">
                     <label>GTIN-14</label>
                     <input type="text" id="inp-gtin" placeholder="00800123456789" value="00800123456789">
                 </div>
                 <div class="control-group">
-                    <label>Lotto (Batch)</label>
+                    <label>Batch Number</label>
                     <input type="text" id="inp-batch" placeholder="B-2026-X" value="B-2026-X">
                 </div>
                 <div class="control-group">
-                    <label>Scadenza (Expiry)</label>
+                    <label>Expiry Date</label>
                     <input type="date" id="inp-expiry" value="2027-12-31">
                 </div>
                 <div class="control-group">
@@ -86,17 +86,17 @@
                     <input type="text" id="inp-aic" placeholder="012345678" value="012345678">
                 </div>
                 <div class="control-group">
-                    <label>Serial Offset (Starting N.)</label>
-                    <input type="number" id="inp-offset" placeholder="Lascia vuoto per cont." value="">
+                    <label>Serial Offset (Starting No.)</label>
+                    <input type="number" id="inp-offset" placeholder="Leave empty to auto-increment" value="">
                 </div>
             </div>
             <div style="margin-top: 24px; display: flex; gap: 12px; align-items: center;">
-                <button onclick="startBatch()" id="btn-start-batch" style="flex: 1; max-width: 350px; background: #8b5cf6;">▶ Invia Dati e Avvia Nastro (Auto-Write)</button>
-                <button onclick="stopBatch()" id="btn-stop-batch" style="flex: 1; max-width: 250px; display: none;" class="danger">⏹ Ferma Nastro</button>
+                <button onclick="startBatch()" id="btn-start-batch" style="flex: 1; max-width: 350px; background: #8b5cf6;">▶ Start Automated Writing</button>
+                <button onclick="stopBatch()" id="btn-stop-batch" style="flex: 1; max-width: 250px; display: none;" class="danger">⏹ Stop Automated Writing</button>
                 
                 <div id="belt-status-indicator" style="display: none; align-items: center; gap: 8px;">
                     <div class="pulsing-dot"></div>
-                    <span style="font-size: 14px; font-weight: bold; color: var(--success);">Nastro in funzione... In attesa di prodotti.</span>
+                    <span style="font-size: 14px; font-weight: bold; color: var(--success);">System running... Waiting for tags.</span>
                 </div>
             </div>
         </div>
