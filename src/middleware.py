@@ -124,6 +124,9 @@ class Middleware:
                         retcode = self.reader_manager.reader.write_memory(
                             epc=tag, data=new_epc_hex, mem_bank="01", address="02", block_num="08", timeout_ms=1000
                         )
+                        self.reader_manager.reader.beep()
+                        print(f"Attempting to write new EPC {new_epc_hex} to tag {tag}, write response: {retcode}")
+
                         if retcode == "00":
                             self.processed_in_batch.add(tag)
                             self.processed_in_batch.add(new_epc_hex)
@@ -137,6 +140,7 @@ class Middleware:
                                 self.on_scan_results([res])
                             self._trigger_state_update()
                 await asyncio.sleep(0.5)
+            
             elif self.current_read_point == "SMART_CABINET":
                 raw_tags = self.reader_manager.read_tags()
                 if raw_tags:
@@ -145,6 +149,7 @@ class Middleware:
                         self.on_scan_results(results)
                     self._trigger_state_update()
                 await asyncio.sleep(30)
+            
             elif self.current_read_point == "DESK":
                 raw_tags = self.reader_manager.read_tags()
                 if raw_tags:
@@ -156,6 +161,7 @@ class Middleware:
                     self.stop_monitoring()
                     break
                 await asyncio.sleep(1) # Fast poll until tag is placed
+            
             elif self.current_read_point == "SMART_TRUCK" or self.current_read_point == "WASTE_CONTAINER":
                 raw_tags = self.reader_manager.read_tags()
                 if raw_tags:
