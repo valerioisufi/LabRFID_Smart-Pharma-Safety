@@ -57,7 +57,7 @@ def main(power, rssi):
             logger.info("Reader ready in Synchronous Mode.")
             reader.set_led(green_status="FF", red_status="00") # Solid green: System ready
             reader.beep(freq_hz=1000, duration_ms=200)
-            reader.set_operation_mode(id_format="02")
+            reader.set_operation_mode(id_format="00")
             
             # --- SYNCHRONOUS INVENTORY LOOP ---
             timeout_ms=2000

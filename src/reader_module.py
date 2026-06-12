@@ -21,6 +21,7 @@ class ReaderManager:
             
         try:
             self.reader.open()
+            self.reader.set_current_mode(id_format="02")
             return True
         except Exception as e:
             logger.error(f"Impossibile connettersi al lettore: {e}")
