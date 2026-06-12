@@ -78,11 +78,29 @@ function updateState(state) {
         }
     } else {
         btnMonitor.style.display = 'flex'; // show the generic monitor button
+        
+        let startText = "▶ Start Monitoring";
+        let stopText = "⏹ Stop Monitoring";
+        
+        if (state.read_point === 'SMART_TRUCK') {
+            startText = "▶ Start Loading Truck";
+            stopText = "⏹ Stop Loading";
+        } else if (state.read_point === 'SMART_CABINET') {
+            startText = "▶ Start Auto-Inventory";
+            stopText = "⏹ Stop Auto-Inventory";
+        } else if (state.read_point === 'DESK') {
+            startText = "▶ Read Item";
+            stopText = "⏹ Cancel Reading";
+        } else if (state.read_point === 'WASTE_CONTAINER') {
+            startText = "▶ Monitor Waste";
+            stopText = "⏹ Stop Monitor";
+        }
+
         if (state.is_monitoring) {
-            btnMonitor.innerText = "⏹ Stop Monitoring";
+            btnMonitor.innerText = stopText;
             btnMonitor.classList.add('danger');
         } else {
-            btnMonitor.innerText = "▶ Start Monitoring";
+            btnMonitor.innerText = startText;
             btnMonitor.classList.remove('danger');
         }
     }

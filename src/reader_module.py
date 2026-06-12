@@ -21,7 +21,8 @@ class ReaderManager:
             
         try:
             self.reader.open()
-            self.reader.set_current_mode(id_format="02")
+            self.reader.set_led(red_status="FF") # Red light during connection attempt
+            self.reader.set_operation_mode(id_format="02")
             return True
         except Exception as e:
             logger.error(f"Impossibile connettersi al lettore: {e}")
@@ -44,31 +45,15 @@ class ReaderManager:
             return
             
         if read_point == "DESK":
-            self.reader.set_power(0x1B) # Potenza minima (per evitare di leggere tag lontani dalla scrivania)
-            self.reader.set_current_mode(mode="01") # Scansione automatica basata sul tempo
-        elif read_point == "SMART_TRUCK" or read_point == "SMART_CABINET":
-            self.reader.set_power(0x00) # Potenza massima (per leggere tutto il contenuto dell'armadio/camion)
-            self.reader.set_current_mode(mode="00") # Normale (inventario manuale, attivato a richiesta)
+            self.reader.set_power(0x1B) # Potenza minima
+        elif read_point == "SMART_CABINET" or read_point == "SMART_TRUCK":
+            self.reader.set_power(0x00) # Potenza massima
         elif read_point == "WASTE_CONTAINER" or read_point == "PACKAGING_LINE":
             self.reader.set_power(0x0A) # Potenza media
-            self.reader.set_current_mode(mode="01") # Scansione automatica basata sul tempo
-
-    def start_async_reading(self, callback: Callable[[list[str]], None]) -> None:
-        """Avvia un thread in background per leggere i tag in modo continuo."""
-        if not self.reader or not self.is_connected:
-            return
             
-        if self.async_thread and self.async_thread.is_alive():
-            return # Già in esecuzione
-            
-        self.async_thread = threading.Thread(target=self.reader.listen_async, args=(callback,))
-        self.async_thread.daemon = True
-        self.async_thread.start()
-        
-    def stop_async_reading(self) -> None:
-        """Ferma il thread di lettura in background."""
-        if self.reader:
-            self.reader.stop_listening()
+        # Imposta sempre il lettore in modalità Standard (00)
+        # Sarà il Middleware Python a decidere quando scansionare facendo polling.
+        self.reader.set_current_mode(mode="00", id_format="02")
             
     def read_tags(self) -> list[str]:
         """Esegue una singola scansione di inventario (Modalità Normale) e ritorna una lista di EPC."""

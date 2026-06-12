@@ -62,18 +62,15 @@ class Middleware:
         self.is_monitoring = True
         self.reader_manager.configure_for_read_point(self.current_read_point)
         
-        if self.current_read_point in ["SMART_TRUCK", "SMART_CABINET"]:
-            if self.main_loop:
-                self.periodic_task = self.main_loop.create_task(self._periodic_scan_loop())
-        else:
-            self.reader_manager.start_async_reading(self._handle_async_read)
+        # Use Python Software Polling for ALL contexts
+        if self.main_loop:
+            self.periodic_task = self.main_loop.create_task(self._periodic_scan_loop())
             
         self._trigger_state_update()
         return True
 
     def stop_monitoring(self):
         self.is_monitoring = False
-        self.reader_manager.stop_async_reading()
         self._trigger_state_update()
 
     def start_batch(self, data: dict):
@@ -89,9 +86,6 @@ class Middleware:
         self.processed_in_batch = self.state_machine.get_epcs_by_batch(batch_name) if batch_name else set()
         
         self.is_monitoring = True
-        self.reader_manager.stop_async_reading()
-        # Force polling mode (00) for continuous safe write
-        self.reader_manager.reader.set_current_mode(mode="00")
         
         if self.main_loop:
             self.periodic_task = self.main_loop.create_task(self._periodic_scan_loop())
@@ -110,7 +104,9 @@ class Middleware:
                 raw_tags = self.reader_manager.read_tags()
                 if raw_tags:
                     for tag in raw_tags:
+                        print(f"Scanned EPC: {tag}")
                         if tag in self.processed_in_batch:
+                            print(f"Tag {tag} already processed in this batch, skipping.")
                             continue
                             
                         asset = self.state_machine.get_asset(tag)
@@ -141,29 +137,35 @@ class Middleware:
                                 self.on_scan_results([res])
                             self._trigger_state_update()
                 await asyncio.sleep(0.5)
-            elif self.current_read_point in ["SMART_TRUCK", "SMART_CABINET"]:
+            elif self.current_read_point == "SMART_CABINET":
                 raw_tags = self.reader_manager.read_tags()
                 if raw_tags:
                     results = self.process_reads(raw_tags, self.current_read_point)
                     if self.on_scan_results:
                         self.on_scan_results(results)
                     self._trigger_state_update()
-                await asyncio.sleep(3)
+                await asyncio.sleep(30)
+            elif self.current_read_point == "DESK":
+                raw_tags = self.reader_manager.read_tags()
+                if raw_tags:
+                    results = self.process_reads(raw_tags, self.current_read_point)
+                    if self.on_scan_results:
+                        self.on_scan_results(results)
+                    self._trigger_state_update()
+                    # Desk reads only ON DEMAND and stops after one successful read event.
+                    self.stop_monitoring()
+                    break
+                await asyncio.sleep(1) # Fast poll until tag is placed
+            elif self.current_read_point == "SMART_TRUCK" or self.current_read_point == "WASTE_CONTAINER":
+                raw_tags = self.reader_manager.read_tags()
+                if raw_tags:
+                    results = self.process_reads(raw_tags, self.current_read_point)
+                    if self.on_scan_results:
+                        self.on_scan_results(results)
+                    self._trigger_state_update()
+                await asyncio.sleep(1)
             else:
                 break
-
-    def _handle_async_read(self, tag_payload: Union[str, Tuple[str, Any]]):
-        epc = tag_payload[0] if isinstance(tag_payload, tuple) else tag_payload
-        if self.main_loop and self.main_loop.is_running():
-            self.main_loop.call_soon_threadsafe(
-                lambda: self.main_loop.create_task(self._process_and_broadcast_async_read(epc))
-            )
-
-    async def _process_and_broadcast_async_read(self, epc: str):
-        results = self.process_reads([epc], self.current_read_point)
-        if self.on_scan_results:
-            self.on_scan_results(results)
-        self._trigger_state_update()
 
     def process_reads(self, raw_epc_list: list[str], read_point: str) -> list[dict[str, Any]]:
         unique_epcs = list(set(raw_epc_list))

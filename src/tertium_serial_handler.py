@@ -623,6 +623,11 @@ class TertiumReader:
                         if line.startswith("$:") and len(line) > 12:
                             tag_data = line[10:]
                             
+                            # Rimuovi il prefisso PC (i primi 4 caratteri esadecimali) se 
+                            # l'id_format configurato include il PC nella risposta.
+                            if getattr(self, 'id_format', "00") in ["02", "03", "07"] and len(tag_data) > 4:
+                                tag_data = tag_data[4:]
+                                
                             if self.rssi_enabled:
                                 # Nessun troncamento: passiamo il tag_data integro
                                 tag_payload = (tag_data, None)

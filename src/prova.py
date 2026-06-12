@@ -57,7 +57,7 @@ def main(power, rssi):
             logger.info("Reader ready in Synchronous Mode.")
             reader.set_led(green_status="FF", red_status="00") # Solid green: System ready
             reader.beep(freq_hz=1000, duration_ms=200)
-            reader.set_operation_mode(id_format="00")
+            reader.set_operation_mode(id_format="02")
             
             # --- SYNCHRONOUS INVENTORY LOOP ---
             timeout_ms=2000
@@ -70,11 +70,12 @@ def main(power, rssi):
                     tags = reader.inventory(timeout_ms=timeout_ms)
                     
                     if k>1:
-                        write_resp=reader.write_memory(tags[0],"FB1434FE0BA4B130D1523501FFEE0000",mem_bank="01",address="02",block_num="08")
+                        # write_resp=reader.write_memory("FB14379F0BA4B130D152140000000000","FB1434FE0BA4B130D1523501AAAAAAAA",mem_bank="01",address="02",block_num="08")
+                        pass
                     else:
                         write_resp="Not yet"
                         
-                    data=reader.read_memory(tags[0],mem_bank="01",address="02",block_num="06")
+                    data=reader.read_memory("FB14379F0BA4B130D152140000000000",mem_bank="01",address="02",block_num="08")
                     
                     if not tags:
                         logger.info("No tags found in the RF field.")
