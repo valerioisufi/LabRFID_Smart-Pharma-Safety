@@ -1,13 +1,14 @@
+from typing import Any
 from src.state_machine import StateMachine
 
 class Middleware:
     """
     Event Engine. Filters raw reads and routes them to the State Machine.
     """
-    def __init__(self):
-        self.state_machine = StateMachine()
+    def __init__(self) -> None:
+        self.state_machine: StateMachine = StateMachine()
 
-    def process_reads(self, raw_epc_list, read_point):
+    def process_reads(self, raw_epc_list: list[str], read_point: str) -> list[dict[str, Any]]:
         """
         Takes a list of EPCs read from the hardware, deduplicates them,
         and processes each one through the state machine.
@@ -23,13 +24,13 @@ class Middleware:
             
         return results
 
-    def get_all_events(self):
+    def get_all_events(self) -> list[dict[str, Any]]:
         """Returns the event history for the UI log."""
         # Refresh DB just in case
         self.state_machine.load_db()
         return self.state_machine.events
         
-    def trigger_external_event(self, event_type):
+    def trigger_external_event(self, event_type: str) -> str:
         """
         Simulate external events like time passing (midnight) or manual lot withdrawals.
         For demo purposes.

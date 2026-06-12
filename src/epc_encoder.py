@@ -19,13 +19,13 @@ def encode_sgtin96(gtin: str, serial: int, prefix_length: int = 7) -> str:
     item_reference = indicator + item_ref_part
     
     # GS1 Partition Table (Prefix Length -> Partition Value)
-    partitions = {
+    partitions: dict[int, int] = {
         12: 0, 11: 1, 10: 2, 9: 3, 8: 4, 7: 5, 6: 6
     }
-    partition = partitions.get(prefix_length, 5)
+    partition: int = partitions.get(prefix_length, 5)
     
     # Bit lengths for (Company Prefix bits, Item Reference bits)
-    bits = {
+    bits: dict[int, tuple[int, int]] = {
         0: (40, 4), 1: (37, 7), 2: (34, 10), 3: (30, 14),
         4: (27, 17), 5: (24, 20), 6: (20, 24)
     }

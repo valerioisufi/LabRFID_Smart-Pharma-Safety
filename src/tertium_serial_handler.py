@@ -1,6 +1,8 @@
 import serial
 import time
+import time
 import logging
+from typing import Optional, Union, Any, List, Tuple
 
 # --- VERSIONING ---
 __version__ = "1.0.0"
@@ -38,7 +40,7 @@ class TertiumReader:
     RET_SUCCESS = "00"
     RET_TIMEOUT = "0D"
 
-    def __init__(self, port, baudrate=38400, timeout=3, rssi_enabled=False, logger=None):
+    def __init__(self, port: str, baudrate: int = 38400, timeout: int = 3, rssi_enabled: bool = False, logger: Optional[logging.Logger] = None) -> None:
         """
         Initializes the reader. Accepts an optional logger instance.
         """

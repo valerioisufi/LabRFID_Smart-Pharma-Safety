@@ -1,6 +1,7 @@
 import time
 import logging
 import threading
+from typing import Optional, Callable, Any
 
 try:
     from src.tertium_serial_handler import TertiumReader
@@ -12,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 class ReaderManager:
     """Hardware Abstraction Layer managing the reader connection."""
-    def __init__(self, port=None):
+    def __init__(self, port: Optional[str] = None) -> None:
         import sys
         if port is None:
             port = "/dev/cu.usbserial-1110" if sys.platform == "darwin" else "COM3"
@@ -20,7 +21,7 @@ class ReaderManager:
         self.reader = None
         self.async_thread = None
         
-    def connect(self):
+    def connect(self) -> bool:
         if not TERTIUM_AVAILABLE:
             logger.error("TertiumReader module not found.")
             return False
@@ -34,18 +35,18 @@ class ReaderManager:
             logger.error(f"Failed to connect to reader: {e}")
             return False
             
-    def disconnect(self):
+    def disconnect(self) -> None:
         self.stop_async_reading()
         if self.reader:
             self.reader.close()
             
     @property
-    def is_connected(self):
+    def is_connected(self) -> bool:
         if not self.reader:
             return False
         return hasattr(self.reader, 'ser') and self.reader.ser is not None and self.reader.ser.is_open
 
-    def configure_for_read_point(self, read_point):
+    def configure_for_read_point(self, read_point: str) -> None:
         """Adjusts reader settings based on the physical environment."""
         if not self.reader or not self.is_connected:
             return
@@ -60,7 +61,7 @@ class ReaderManager:
             self.reader.set_power(0x0A) # Medium power
             self.reader.set_current_mode(mode="01") # Time-based auto scan
 
-    def start_async_reading(self, callback):
+    def start_async_reading(self, callback: Callable[[list[str]], None]) -> None:
         """Starts a background thread to continuously read tags."""
         if not self.reader or not self.is_connected:
             return
@@ -72,12 +73,12 @@ class ReaderManager:
         self.async_thread.daemon = True
         self.async_thread.start()
         
-    def stop_async_reading(self):
+    def stop_async_reading(self) -> None:
         """Stops the background reading thread."""
         if self.reader and hasattr(self.reader, 'stop_listening'):
             self.reader.stop_listening()
             
-    def read_tags(self):
+    def read_tags(self) -> list[str]:
         """Performs a single inventory scan (Normal mode) and returns a list of EPCs."""
         if not self.reader or not self.is_connected:
             return []
@@ -89,7 +90,7 @@ class ReaderManager:
             return [t[0] for t in tags]
         return tags
 
-    def write_new_epc(self, new_epc_hex: str):
+    def write_new_epc(self, new_epc_hex: str) -> tuple[bool, str]:
         """
         Reads the first available tag in range, and overwrites its EPC memory
         with the new SGTIN-96 EPC.

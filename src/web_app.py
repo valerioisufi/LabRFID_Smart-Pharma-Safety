@@ -3,9 +3,9 @@ import collections
 import json
 import logging
 import sys
+from typing import List, Any, Optional, Dict, Tuple, Union
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import List
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse
@@ -57,36 +57,36 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(lifespan=lifespan)
+app: FastAPI = FastAPI(lifespan=lifespan)
 
 # Setup static files and templates
 app.mount("/static", StaticFiles(directory=str(Path(__file__).resolve().parent / "static")), name="static")
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
 
 # Global State
-default_port = "/dev/cu.usbserial-1110" if sys.platform == "darwin" else "COM3"
-middleware = Middleware()
-reader_manager = ReaderManager(port=default_port)
-current_read_point = "PACKAGING_LINE"
-is_monitoring = False
-periodic_task = None
-active_batch_config = None
-processed_in_batch = set()
+default_port: str = "/dev/cu.usbserial-1110" if sys.platform == "darwin" else "COM3"
+middleware: Middleware = Middleware()
+reader_manager: ReaderManager = ReaderManager(port=default_port)
+current_read_point: str = "PACKAGING_LINE"
+is_monitoring: bool = False
+periodic_task: Optional[asyncio.Task[Any]] = None
+active_batch_config: Optional[Dict[str, Any]] = None
+processed_in_batch: set[str] = set()
 
 
 # WebSocket Connection Manager
 class ConnectionManager:
-    def __init__(self):
+    def __init__(self) -> None:
         self.active_connections: List[WebSocket] = []
 
-    async def connect(self, websocket: WebSocket):
+    async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
         self.active_connections.append(websocket)
 
-    def disconnect(self, websocket: WebSocket):
+    def disconnect(self, websocket: WebSocket) -> None:
         self.active_connections.remove(websocket)
 
-    async def broadcast(self, message: str):
+    async def broadcast(self, message: str) -> None:
         for connection in self.active_connections:
             try:
                 await connection.send_text(message)
@@ -94,11 +94,11 @@ class ConnectionManager:
                 pass
 
 
-manager = ConnectionManager()
+manager: ConnectionManager = ConnectionManager()
 
 
 # --- HELPER FUNCTIONS ---
-def get_kpis():
+def get_kpis() -> Dict[str, int]:
     assets = middleware.state_machine.assets.values()
     return {
         "total_assets": len(assets),
@@ -111,8 +111,8 @@ def get_kpis():
     }
 
 
-async def send_state_update():
-    state = {
+async def send_state_update() -> None:
+    state: Dict[str, Any] = {
         "type": "state_update",
         "read_point": current_read_point,
         "is_monitoring": is_monitoring,
@@ -125,7 +125,7 @@ async def send_state_update():
     await manager.broadcast(json.dumps(state))
 
 
-async def process_and_broadcast_async_read(epc):
+async def process_and_broadcast_async_read(epc: str) -> None:
     results = middleware.process_reads([epc], current_read_point)
     await manager.broadcast(json.dumps({
         "type": "scan_results",
@@ -134,7 +134,7 @@ async def process_and_broadcast_async_read(epc):
     await send_state_update()
 
 
-def handle_async_read(tag_payload):
+def handle_async_read(tag_payload: Union[str, Tuple[str, Any]]) -> None:
     epc = tag_payload[0] if isinstance(tag_payload, tuple) else tag_payload
 
     # Safely schedule on the main event loop from the background thread
@@ -214,13 +214,9 @@ def get_available_ports():
 @app.get("/", response_class=HTMLResponse)
 async def get_dashboard(request: Request):
     context = {"request": request, "default_port": default_port}
-    try:
-        # Starlette >= 0.28.0 (FastAPI >= 0.100.0)
-        return templates.TemplateResponse(request=request, name="index.html", context=context)
-    except TypeError:
-        # Starlette < 0.28.0 (FastAPI < 0.100.0)
-        return templates.TemplateResponse("index.html", context)
 
+    # Starlette >= 0.28.0 (FastAPI >= 0.100.0)
+    return templates.TemplateResponse(request=request, name="index.html", context=context)
 
 @app.post("/api/connect")
 async def toggle_connection(data: dict):

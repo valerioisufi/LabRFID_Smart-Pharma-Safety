@@ -4,19 +4,20 @@ from pathlib import Path
 import datetime
 import uuid
 import logging
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
 DB_PATH = str(Path(__file__).resolve().parent.parent / "data" / "database.json")
 
 class StateMachine:
-    def __init__(self):
-        self.assets = {}
-        self.events = []
-        self.serial_counter = 1
+    def __init__(self) -> None:
+        self.assets: dict[str, dict[str, Any]] = {}
+        self.events: list[dict[str, Any]] = []
+        self.serial_counter: int = 1
         self.load_db()
 
-    def load_db(self):
+    def load_db(self) -> None:
         if not os.path.exists(DB_PATH):
             self.assets = {}
             self.events = []
@@ -34,7 +35,7 @@ class StateMachine:
             self.events = []
             self.serial_counter = 1
 
-    def save_db(self):
+    def save_db(self) -> None:
         try:
             # Ensure directory exists
             os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
@@ -47,10 +48,10 @@ class StateMachine:
         except Exception as e:
             logger.error(f"Error saving DB: {e}")
 
-    def get_asset(self, epc):
+    def get_asset(self, epc: str) -> Optional[dict[str, Any]]:
         return self.assets.get(epc)
 
-    def process_read(self, epc, read_point):
+    def process_read(self, epc: str, read_point: str) -> dict[str, Any]:
         """
         Core logic for State Machine.
         Returns a dict with: {'status': 'OK'/'ALERT', 'message': '...', 'asset': asset_dict}
