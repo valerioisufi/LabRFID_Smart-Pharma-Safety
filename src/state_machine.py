@@ -1,12 +1,13 @@
 import json
 import os
+from pathlib import Path
 import datetime
 import uuid
 import logging
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "database.json")
+DB_PATH = str(Path(__file__).resolve().parent.parent / "data" / "database.json")
 
 class StateMachine:
     def __init__(self):

@@ -2,10 +2,10 @@ import asyncio
 import collections
 import json
 import logging
-import os
 import sys
-from typing import List
 from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import List
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse
@@ -13,10 +13,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 # Add project root to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from src.reader_module import ReaderManager
 from src.middleware import Middleware
+
 
 # Custom Log Handler to capture logs for the Web UI
 class DequeHandler(logging.Handler):
@@ -40,6 +41,7 @@ class DequeHandler(logging.Handler):
         except Exception:
             pass
 
+
 deque_handler = DequeHandler()
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 deque_handler.setFormatter(formatter)
@@ -48,16 +50,18 @@ logging.getLogger("src.tertium_serial_handler").addHandler(deque_handler)
 logging.getLogger("src.reader_module").setLevel(logging.INFO)
 logging.getLogger("src.tertium_serial_handler").setLevel(logging.INFO)
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     deque_handler.main_loop = asyncio.get_running_loop()
     yield
 
+
 app = FastAPI(lifespan=lifespan)
 
 # Setup static files and templates
-app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
-templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
+app.mount("/static", StaticFiles(directory=str(Path(__file__).resolve().parent / "static")), name="static")
+templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
 
 # Global State
 default_port = "/dev/cu.usbserial-1110" if sys.platform == "darwin" else "COM3"
@@ -68,6 +72,7 @@ is_monitoring = False
 periodic_task = None
 active_batch_config = None
 processed_in_batch = set()
+
 
 # WebSocket Connection Manager
 class ConnectionManager:
@@ -88,7 +93,9 @@ class ConnectionManager:
             except:
                 pass
 
+
 manager = ConnectionManager()
+
 
 # --- HELPER FUNCTIONS ---
 def get_kpis():
@@ -103,6 +110,7 @@ def get_kpis():
         "expired": sum(1 for a in assets if middleware.state_machine._is_expired(a.get("expiryDate")))
     }
 
+
 async def send_state_update():
     state = {
         "type": "state_update",
@@ -111,10 +119,11 @@ async def send_state_update():
         "is_connected": reader_manager.is_connected,
         "batch_active": active_batch_config is not None,
         "kpis": get_kpis(),
-        "events": middleware.get_all_events()[-50:], # Send last 50 events
-        "system_logs": list(deque_handler.logs) # Send the buffer of logs
+        "events": middleware.get_all_events()[-50:],  # Send last 50 events
+        "system_logs": list(deque_handler.logs)  # Send the buffer of logs
     }
     await manager.broadcast(json.dumps(state))
+
 
 async def process_and_broadcast_async_read(epc):
     results = middleware.process_reads([epc], current_read_point)
@@ -124,9 +133,10 @@ async def process_and_broadcast_async_read(epc):
     }))
     await send_state_update()
 
+
 def handle_async_read(tag_payload):
     epc = tag_payload[0] if isinstance(tag_payload, tuple) else tag_payload
-    
+
     # Safely schedule on the main event loop from the background thread
     loop = deque_handler.main_loop
     if loop and loop.is_running():
@@ -134,7 +144,9 @@ def handle_async_read(tag_payload):
             lambda: asyncio.create_task(process_and_broadcast_async_read(epc))
         )
 
+
 from src.epc_encoder import encode_sgtin96
+
 
 async def periodic_scan_loop():
     global processed_in_batch
@@ -146,16 +158,16 @@ async def periodic_scan_loop():
                     # Skip if this tag has already been processed in the current batch run
                     if tag in processed_in_batch:
                         continue
-                        
+
                     # Also skip if the tag already contains an EPC that is registered in our DB for this batch
                     asset = middleware.state_machine.get_asset(tag)
                     if asset and asset.get("batch") == active_batch_config.get("batch"):
                         processed_in_batch.add(tag)
                         continue
-                        
+
                     serial = middleware.state_machine.serial_counter
                     new_epc_hex = encode_sgtin96(
-                        active_batch_config.get("gtin", ""), 
+                        active_batch_config.get("gtin", ""),
                         serial, prefix_length=7
                     )
                     # Scrittura fisica
@@ -166,16 +178,16 @@ async def periodic_scan_loop():
                         # Mark both the old and new EPCs as processed to prevent loop writing
                         processed_in_batch.add(tag)
                         processed_in_batch.add(new_epc_hex)
-                        
+
                         res = middleware.state_machine.commission_asset(
-                            epc=new_epc_hex, gtin=active_batch_config.get("gtin"), 
+                            epc=new_epc_hex, gtin=active_batch_config.get("gtin"),
                             batch=active_batch_config.get("batch"), expiry_date=active_batch_config.get("expiry"),
                             aic=active_batch_config.get("aic"), old_epc=tag
                         )
                         await manager.broadcast(json.dumps({"type": "scan_results", "results": [res]}))
                         await send_state_update()
-            await asyncio.sleep(0.5) # Polling veloce per il nastro trasportatore
-            
+            await asyncio.sleep(0.5)  # Polling veloce per il nastro trasportatore
+
         elif current_read_point in ["SMART_TRUCK", "SMART_CABINET"]:
             raw_tags = reader_manager.read_tags()
             if raw_tags:
@@ -185,16 +197,19 @@ async def periodic_scan_loop():
                     "results": results
                 }))
                 await send_state_update()
-            await asyncio.sleep(3) # Polling lento per l'inventario
+            await asyncio.sleep(3)  # Polling lento per l'inventario
         else:
             break
 
+
 import serial.tools.list_ports
+
 
 @app.get("/api/ports")
 def get_available_ports():
     ports = [p.device for p in serial.tools.list_ports.comports()]
     return {"ports": ports}
+
 
 @app.get("/", response_class=HTMLResponse)
 async def get_dashboard(request: Request):
@@ -205,6 +220,7 @@ async def get_dashboard(request: Request):
     except TypeError:
         # Starlette < 0.28.0 (FastAPI < 0.100.0)
         return templates.TemplateResponse("index.html", context)
+
 
 @app.post("/api/connect")
 async def toggle_connection(data: dict):
@@ -220,30 +236,32 @@ async def toggle_connection(data: dict):
     await send_state_update()
     return {"status": "success"}
 
+
 @app.post("/api/read_point")
 async def set_read_point(data: dict):
     global current_read_point, is_monitoring, active_batch_config
     current_read_point = data.get("read_point", "PACKAGING_LINE")
-    
+
     # Stop monitoring on context switch
     is_monitoring = False
     active_batch_config = None
     reader_manager.stop_async_reading()
     if reader_manager.is_connected:
         reader_manager.configure_for_read_point(current_read_point)
-        
+
     await send_state_update()
     return {"status": "success"}
+
 
 @app.post("/api/monitor")
 async def toggle_monitor():
     global is_monitoring, periodic_task
-    
+
     if not reader_manager.is_connected:
         return {"status": "error", "message": "Reader not connected"}
-        
+
     is_monitoring = not is_monitoring
-    
+
     if is_monitoring:
         reader_manager.configure_for_read_point(current_read_point)
         if current_read_point in ["SMART_TRUCK", "SMART_CABINET"]:
@@ -253,22 +271,23 @@ async def toggle_monitor():
     else:
         reader_manager.stop_async_reading()
         # periodic_task will stop on its next loop due to `is_monitoring == False`
-        
+
     await send_state_update()
     return {"status": "success"}
+
 
 @app.post("/api/start_batch")
 async def start_batch(data: dict):
     global active_batch_config, is_monitoring, periodic_task, processed_in_batch
-    
+
     if not reader_manager.is_connected:
         return {"status": "error", "message": "Reader not connected."}
-        
+
     active_batch_config = data
     offset = data.get("serial_offset")
     if offset:
         middleware.state_machine.set_serial_counter(offset)
-        
+
     # Reset processed tags set and populate with existing ones in DB for the same batch
     processed_in_batch = set()
     batch_name = data.get("batch")
@@ -278,15 +297,16 @@ async def start_batch(data: dict):
                 processed_in_batch.add(epc)
                 if asset.get("oldEpc"):
                     processed_in_batch.add(asset.get("oldEpc"))
-        
+
     is_monitoring = True
     reader_manager.stop_async_reading()
     # Force polling mode (00) for continuous safe write
     reader_manager.reader.set_current_mode(mode="00")
-    
+
     periodic_task = asyncio.create_task(periodic_scan_loop())
     await send_state_update()
     return {"status": "success"}
+
 
 @app.post("/api/stop_batch")
 async def stop_batch():
@@ -295,6 +315,7 @@ async def stop_batch():
     is_monitoring = False
     await send_state_update()
     return {"status": "success"}
+
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -306,6 +327,8 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
