@@ -63,10 +63,10 @@ class TertiumReader:
         self.timeout = timeout
         self.ser = None
         self.logger = logger or logging.getLogger(__name__)
-        if rssi_enabled==True: # Tracks if RSSI value is expected in inventory responses
-            self.rssi_enabled = True 
-        else:
-            self.rssi_enabled = False
+
+        self.rssi_enabled = rssi_enabled
+        self._initial_sync_done = False
+        self._stop_listening = None
 
     def open(self):
         """Opens the serial port and waits for initialization."""
@@ -82,6 +82,11 @@ class TertiumReader:
             self.logger.info(f"Connected to {self.port} at {self.baudrate} bps")
             self.ser.reset_input_buffer()
             time.sleep(2.0) # Hardware boot wait
+
+            self.set_rssi_filter(enabled=self.rssi_enabled)
+            self._initial_sync_done = True
+            
+            self.logger.info("Connection established and hardware synced.")
         except serial.SerialException as e:
             raise TertiumConnectionError(f"Could not open port {self.port}: {e}")
 
@@ -120,7 +125,7 @@ class TertiumReader:
             bytes: The ASCII encoded frame ready for transmission.
         """
         raw_len = 6 + len(params)
-        #return f"$:{raw_len:02X}{seq}{cmd_code}{params}\r".encode('ascii')
+
         frame = f"$:{raw_len:02X}{seq}{cmd_code}{params}\r"
         return frame.encode('ascii')
     
@@ -311,6 +316,46 @@ class TertiumReader:
             self.logger.error(f"Failed to set operation mode. Response: {resp}")
             return False
         
+    def get_operation_mode(self):
+        """
+        Tenta di leggere la configurazione attuale del SETMODE (0E)
+        inviando il comando senza parametri.
+        
+        Returns:
+            dict: Dizionario con i parametri decodificati, oppure None in caso di errore/timeout.
+        """
+        if not self.ser or not self.ser.is_open:
+            raise TertiumConnectionError("Port is not open.")
+
+        self.logger.info("Interrogazione stato SETMODE (0E)...")
+        # Inviamo il comando 0E senza parametri
+        resp = self.send_command(self.CMD_SET_MODE, "")
+        
+        # Risposta attesa (se supportata): 
+        # $: LL SS [00] [mode] [local] [id_format] [max_num] [tscan] [tinterval]
+        # Minimo 6 byte di header/retcode + 12 char di parametri = 18 char
+        if resp:
+            if len(resp) >= 18 and resp[4:6] == self.RET_SUCCESS:
+                try:
+                    mode_config = {
+                        "mode": resp[6:8],
+                        "local": resp[8:10],
+                        "id_format": resp[10:12],
+                        "max_num": resp[12:14],
+                        "tscan": resp[14:16],
+                        "tinterval": resp[16:18]
+                    }
+                    self.logger.info(f"Configurazione letta con successo: {mode_config}")
+                    return mode_config
+                except IndexError:
+                    self.logger.error(f"Risposta troncata o malformata: {resp}")
+            else:
+                self.logger.error(f"Il lettore ha risposto con un errore o formato inatteso: {resp}")
+        else:
+            self.logger.warning("Timeout. Il modulo RE40 non supporta la lettura del comando SETMODE (write-only).")
+            
+        return None
+        
     def set_rssi_filter(self, enabled=False, threshold_dbm=-80):
         """
         Enables RSSI filtering and presence in inventory output (RE-40 only).
@@ -326,7 +371,16 @@ class TertiumReader:
         
         params = f"{active}{threshold_hex}"
         resp = self.send_command(self.CMD_SET_RSSI_FILTER, params)
-        return resp and len(resp) >= 8 and resp[6:8] == self.RET_SUCCESS
+
+        # Valida il successo del comando
+        success = resp and len(resp) >= 8 and resp[6:8] == self.RET_SUCCESS
+        
+        # Sincronizza lo stato software solo se l'hardware ha accettato il comando
+        if success:
+            self.rssi_enabled = enabled
+            self.logger.info(f"RSSI Filter updated. Hardware state matches software: {enabled}")
+            
+        return success
 
     def set_id_filter(self, filter_type=0, mask1="", mask2=""):
         """
@@ -355,7 +409,8 @@ class TertiumReader:
         """
         Performs a synchronous inventory (Command 11).
         Waits for the specified time collecting all unique tags found.
-        If RSSI presence is enabled, returns a list of tuples: (EPC, RSSI_dBm).
+        If RSSI presence is enabled, returns a list of tuples: (EPC, None) 
+        since the RE40 hardware filters tags but does not append the RSSI value.
         
         Args:
             timeout_ms (int): Scan duration in milliseconds.
@@ -363,6 +418,9 @@ class TertiumReader:
         Returns:
             reads: List of detected EPCs.
         """
+        if not getattr(self, '_initial_sync_done', False):
+            raise TertiumError("Hardware not synced. Call open() and ensure initialization is complete before operating.")
+
         timeout_hex = f"{int(timeout_ms / 100):02X}"
         self.ser.write(self._calculate_frame(self.CMD_INVENTORY, timeout_hex))
         
@@ -377,13 +435,9 @@ class TertiumReader:
                 tag_data = line[10:]
                 
                 if self.rssi_enabled:
-                    # Last 2 characters are the RSSI hex value
-                    epc = tag_data[:-2]
-                    rssi_hex = tag_data[-2:]
-                    # Convert 2's complement hex to signed integer
-                    rssi = int(rssi_hex, 16)
-                    if rssi > 127: rssi -= 256
-                    reads.append((epc, rssi))
+                    # Il filtro hardware è attivo, ma restituiamo l'EPC puro e intero 
+                    # senza alcun troncamento.
+                    reads.append((tag_data, None))
                 else:
                     reads.append(tag_data)
                     
@@ -404,6 +458,9 @@ class TertiumReader:
         Returns:
             resp (str): Returns the memory blocks read
         """
+        if not getattr(self, '_initial_sync_done', False):
+            raise TertiumError("Hardware not synced. Call open() and ensure initialization is complete before operating.")
+
         # Convert timeout in milliseconds to protocol hex format (units of 100ms)
         timeout_hex = f"{int(timeout_ms / 100):02X}"
         
@@ -446,6 +503,9 @@ class TertiumReader:
             DESCRIPTION.
 
         """
+        if not getattr(self, '_initial_sync_done', False):
+            raise TertiumError("Hardware not synced. Call open() and ensure initialization is complete before operating.")
+
         # Convert timeout in milliseconds to protocol hex format (units of 100ms)
         timeout_hex = f"{int(timeout_ms / 100):02X}"
         params = f"{timeout_hex}{epc}{mem_bank}{address}{block_num}{data}{acc_password}"
@@ -475,6 +535,9 @@ class TertiumReader:
         Returns:
             temp_val (float): Temperature in °C, or None if error/invalid.
         """
+        if not getattr(self, '_initial_sync_done', False):
+            raise TertiumError("Hardware not synced. Call open() and ensure initialization is complete before operating.")
+
         # Convert timeout in milliseconds to protocol hex format (units of 100ms)
         timeout_hex = f"{int(timeout_ms / 100):02X}"
         
@@ -511,12 +574,14 @@ class TertiumReader:
     
     def listen_async(self, callback=None):
         """
-        Continuously listens to the serial port for asynchronous data (Scan on Time / Scan on Input).
+        Continuously listens to the serial port for asynchronous data.
         
         Args:
             callback (function): Function to call when a tag is detected.
-                                 If None, the tag will just be printed in the logs.
         """
+        if not getattr(self, '_initial_sync_done', False):
+            raise TertiumError("Hardware not synced. Call open() and ensure initialization is complete before operating.")
+
         self.logger.info("Listening for asynchronous data... (Press Ctrl+C to stop)")
         self._stop_listening = False
         try:
@@ -528,11 +593,8 @@ class TertiumReader:
                             tag_data = line[10:]
                             
                             if self.rssi_enabled:
-                                epc = tag_data[:-2]
-                                rssi_hex = tag_data[-2:]
-                                rssi = int(rssi_hex, 16)
-                                if rssi > 127: rssi -= 256
-                                tag_payload = (epc, rssi)
+                                # Nessun troncamento: passiamo il tag_data integro
+                                tag_payload = (tag_data, None)
                             else:
                                 tag_payload = tag_data
                                 
