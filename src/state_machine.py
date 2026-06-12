@@ -84,7 +84,18 @@ class StateMachine:
             logger.error(f"Errore nel salvataggio del database: {e}")
 
     def get_asset(self, epc: str) -> Optional[dict[str, Any]]:
-        return self.assets.get(epc)
+        # Cerca prima per EPC primario (quello nuovo commissionato)
+        asset = self.assets.get(epc)
+        if asset:
+            return asset
+            
+        # Fallback: cerca se questo EPC è l'oldEpc di qualche asset.
+        # Questo accade se la scrittura fisica sul tag RFID è fallita ma il db ha registrato il nuovo EPC.
+        for a in self.assets.values():
+            if a.get("oldEpc") == epc:
+                return a
+                
+        return None
 
     def process_read(self, epc: str, read_point: str) -> dict[str, Any]:
         """

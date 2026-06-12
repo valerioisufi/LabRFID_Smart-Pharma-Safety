@@ -282,6 +282,7 @@ class TertiumReader:
                   f"{str(t_interval).zfill(2).upper()}")
         resp = self.send_command(self.CMD_MODE, params)
         if resp and len(resp) >= 8 and resp[6:8] == self.RET_SUCCESS:
+            self.id_format = str(id_format).zfill(2).upper()
             self.logger.info("Current operation mode set successfully (Volatile).")
             return True
         return False
@@ -312,6 +313,7 @@ class TertiumReader:
                   f"{str(t_interval).zfill(2).upper()}")
         resp = self.send_command(self.CMD_SET_MODE, params)
         if resp and len(resp) >= 8 and resp[6:8] == self.RET_SUCCESS:
+            self.id_format = str(id_format).zfill(2).upper()
             self.logger.info("Operation mode configured successfully.")
             return True
         else:
@@ -436,6 +438,11 @@ class TertiumReader:
             if len(line) > 12:
                 tag_data = line[10:]
                 
+                # Rimuovi il prefisso PC (i primi 4 caratteri esadecimali) se 
+                # l'id_format configurato include il PC nella risposta.
+                if getattr(self, 'id_format', "00") in ["02", "03", "07"] and len(tag_data) > 4:
+                    tag_data = tag_data[4:]
+                
                 if self.rssi_enabled:
                     # Il filtro hardware è attivo, ma restituiamo l'EPC puro e intero 
                     # senza alcun troncamento.
@@ -466,7 +473,13 @@ class TertiumReader:
         # Convert timeout in milliseconds to protocol hex format (units of 100ms)
         timeout_hex = f"{int(timeout_ms / 100):02X}"
         
-        params = f"{timeout_hex}{epc}{mem_bank}{address}{block_num}{password}"
+        if getattr(self, 'id_format', "00") in ["02", "03", "07"]:
+            pc_word = f"{(len(epc) // 4) << 11:04X}"
+            epc_param = f"{pc_word}{epc}"
+        else:
+            epc_param = epc
+            
+        params = f"{timeout_hex}{epc_param}{mem_bank}{address}{block_num}{password}"
         resp = self.send_command(self.CMD_READ_BANK, params)
         
         if resp and len(resp) >= 8 and resp[6:8] == self.RET_SUCCESS:
@@ -510,7 +523,21 @@ class TertiumReader:
 
         # Convert timeout in milliseconds to protocol hex format (units of 100ms)
         timeout_hex = f"{int(timeout_ms / 100):02X}"
-        params = f"{timeout_hex}{epc}{mem_bank}{address}{block_num}{data}{acc_password}"
+        
+        if getattr(self, 'id_format', "00") in ["02", "03", "07"]:
+            pc_word = f"{(len(epc) // 4) << 11:04X}"
+            epc_param = f"{pc_word}{epc}"
+        else:
+            epc_param = epc
+            
+        if mem_bank == "01" and address == "02":
+            block_num = f"{int(block_num, 16) + 1:02X}"
+            address = "01"
+
+            new_pc_word = f"{(len(data) // 4) << 11:04X}"
+            params = f"{timeout_hex}{epc_param}{mem_bank}{address}{block_num}{new_pc_word}{data}{acc_password}"
+        else:
+            params = f"{timeout_hex}{epc_param}{mem_bank}{address}{block_num}{data}{acc_password}"
         
         resp = self.send_command(self.CMD_WRITE_BANK, params)
         
