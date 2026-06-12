@@ -143,7 +143,7 @@ function renderKPIs(kpis, context) {
         ];
     } else if (context === "SMART_TRUCK") {
         kpiData = [
-            { label: "Batches in Transit", value: kpis.in_transit }
+            { label: "Assets in Transit", value: kpis.distributing }
         ];
     } else if (context === "SMART_CABINET") {
         kpiData = [
