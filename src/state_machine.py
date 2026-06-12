@@ -104,8 +104,8 @@ class StateMachine:
         """
         asset = self.get_asset(epc)
 
-        print(f"Processing read for EPC: {epc} at {read_point}. Asset found: {bool(asset)}")
-        print(f"Asset details: {asset}")
+        logger.debug(f"Processing read for EPC: {epc} at {read_point}. Asset found: {bool(asset)}")
+        logger.debug(f"Asset details: {asset}")
         
         if not asset:
             return {

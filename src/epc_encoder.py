@@ -1,4 +1,7 @@
 import datetime
+import logging
+
+logger = logging.getLogger(__name__)
 
 def encode_sgtin96(gtin: str, serial: int, prefix_length: int = 7) -> str:
     """
@@ -137,10 +140,10 @@ if __name__ == "__main__":
     serial_hex = "00000001"
     exp_date = datetime.date(2022, 7, 24)
     
-    print("--- SGTIN-96 ---")
-    print(f"GTIN: {gtin}, Serial: {serial_int}")
-    print(f"EPC Hex: {encode_sgtin96(gtin, serial_int, prefix_length=7)}")
+    logger.info("--- SGTIN-96 ---")
+    logger.info(f"GTIN: {gtin}, Serial: {serial_int}")
+    logger.info(f"EPC Hex: {encode_sgtin96(gtin, serial_int, prefix_length=7)}")
     
-    print("\n--- DSGTIN+ 128-bit ---")
-    print(f"GTIN: {gtin}, Serial: {serial_hex}, Expiry: {exp_date}")
-    print(f"EPC Hex: {encode_dsgtin128(gtin, serial_hex, exp_date)}")
+    logger.info("\n--- DSGTIN+ 128-bit ---")
+    logger.info(f"GTIN: {gtin}, Serial: {serial_hex}, Expiry: {exp_date}")
+    logger.info(f"EPC Hex: {encode_dsgtin128(gtin, serial_hex, exp_date)}")

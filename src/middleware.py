@@ -3,6 +3,9 @@ from typing import Any, Optional, Callable, Dict, Union, Tuple
 from src.state_machine import StateMachine
 from src.reader_module import ReaderManager
 from src.epc_encoder import encode_dsgtin128
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Middleware:
     """
@@ -104,9 +107,9 @@ class Middleware:
                 raw_tags = self.reader_manager.read_tags()
                 if raw_tags:
                     for tag in raw_tags:
-                        print(f"Scanned EPC: {tag}")
+                        logger.debug(f"Scanned EPC: {tag}")
                         if tag in self.processed_in_batch:
-                            print(f"Tag {tag} already processed in this batch, skipping.")
+                            logger.debug(f"Tag {tag} already processed in this batch, skipping.")
                             continue
                             
                         asset = self.state_machine.get_asset(tag)
@@ -125,7 +128,7 @@ class Middleware:
                             epc=tag, data=new_epc_hex, mem_bank="01", address="02", block_num="08", timeout_ms=1000
                         )
                         self.reader_manager.reader.beep()
-                        print(f"Attempting to write new EPC {new_epc_hex} to tag {tag}, write response: {retcode}")
+                        logger.info(f"Attempting to write new EPC {new_epc_hex} to tag {tag}, write response: {retcode}")
 
                         if retcode == "00":
                             self.processed_in_batch.add(tag)

@@ -4,6 +4,8 @@ import time
 import logging
 from typing import Optional, Union, Any, List, Tuple
 
+logger = logging.getLogger(__name__)
+
 # --- VERSIONING ---
 __version__ = "1.0.0"
 
@@ -151,15 +153,7 @@ class TertiumReader:
         frame = self._calculate_frame(cmd_code, params)
         self.ser.write(frame)
         
-        #Temp
-        if cmd_code == self.CMD_READ_TEMP:
-            print(f"Read Temperature Command Frame: {frame}")
-        
         raw_resp = self.ser.read_until(b'\r').decode('ascii').strip()
-        
-        if cmd_code == self.CMD_READ_TEMP:
-            print(f"Read Temperature Command Response: {raw_resp}")
-        #-------------------------------------------------------------
         
         if not raw_resp:
             self.logger.error(f"Timeout waiting for command {cmd_code}")
@@ -584,7 +578,7 @@ class TertiumReader:
         
         return None
 
-    def read_temperature(self, epc, timeout_ms=1000, tag_type="01", tag_subtype="00", password=""):
+    def read_temperature(self, epc, timeout_ms=1000, tag_type="01", tag_subtype="00", password="", verbose=False):
         """
         Reads temperature from a sensor tag according to the READTEMP protocol.
         
@@ -620,7 +614,8 @@ class TertiumReader:
                 # 12:14 -> validity
                 # 14:18 -> temperature
                 validity = resp[12:14]
-                print(validity)
+                if verbose:
+                    self.logger.debug(validity)
                 temp_val = int(resp[14:18], 16) / 10.0
                 
                 # Check validity as per manual (00=invalid, 01=valid but not accurate, 02=valid and accurate)

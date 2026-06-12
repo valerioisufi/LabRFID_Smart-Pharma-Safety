@@ -40,13 +40,20 @@ class DequeHandler(logging.Handler):
         except Exception:
             pass
 
+class AppLogFilter(logging.Filter):
+    def filter(self, record):
+        if record.name.startswith("src.tertium_serial_handler"):
+            return False
+        return True
+
 deque_handler = DequeHandler()
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter('%(asctime)s - [%(name)s] %(levelname)s - %(message)s')
 deque_handler.setFormatter(formatter)
-logging.getLogger("src.reader_module").addHandler(deque_handler)
-logging.getLogger("src.tertium_serial_handler").addHandler(deque_handler)
-logging.getLogger("src.reader_module").setLevel(logging.INFO)
-logging.getLogger("src.tertium_serial_handler").setLevel(logging.INFO)
+deque_handler.addFilter(AppLogFilter())
+
+src_logger = logging.getLogger("src")
+src_logger.setLevel(logging.DEBUG)
+src_logger.addHandler(deque_handler)
 
 
 @asynccontextmanager

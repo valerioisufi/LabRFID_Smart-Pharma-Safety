@@ -68,7 +68,7 @@ class ReaderManager:
         if tags and isinstance(tags[0], tuple):
             return [t[0] for t in tags]
         
-        print(f"Tags letti: {tags}")
+        logger.debug(f"Tags letti: {tags}")
         return tags
 
     def write_new_epc(self, new_epc_hex: str) -> tuple[bool, str]:
