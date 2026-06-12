@@ -96,6 +96,11 @@ def encode_dsgtin128(gtin: str, serial: str, expiry_date: datetime.date, filter_
     epc = (epc << 4) | 4
     
     # 5. Date (16 bit) - Formato YYMMDD compresso: (Year << 9) | (Month << 5) | Day
+    if isinstance(expiry_date, str):
+        try:
+            expiry_date = datetime.datetime.strptime(expiry_date, "%Y-%m-%d")
+        except ValueError:
+            pass
     year = expiry_date.year % 100
     month = expiry_date.month
     day = expiry_date.day

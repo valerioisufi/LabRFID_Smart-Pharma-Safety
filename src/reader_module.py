@@ -79,6 +79,8 @@ class ReaderManager:
         # Se il lettore ritorna una lista di tuple (EPC, RSSI), estraiamo solo gli EPC
         if tags and isinstance(tags[0], tuple):
             return [t[0] for t in tags]
+        
+        print(f"Tags letti: {tags}")
         return tags
 
     def write_new_epc(self, new_epc_hex: str) -> tuple[bool, str]:

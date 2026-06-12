@@ -9,6 +9,7 @@ from typing import Any, Optional
 logger = logging.getLogger(__name__)
 
 DB_PATH = str(Path(__file__).resolve().parent.parent / "data" / "database.json")
+BLACKLIST_PATH = str(Path(__file__).resolve().parent.parent / "data" / "blacklisted_batches.json")
 
 class StateMachine:
     """
@@ -19,7 +20,37 @@ class StateMachine:
         self.assets: dict[str, dict[str, Any]] = {}
         self.events: list[dict[str, Any]] = []
         self.serial_counter: int = 1
+        self.simulated_date: Optional[str] = None
+        self.blacklisted_batches: set[str] = set()
         self.load_db()
+        self.load_blacklist()
+
+    def load_blacklist(self) -> None:
+        if not os.path.exists(BLACKLIST_PATH):
+            self.blacklisted_batches = set()
+            return
+        try:
+            with open(BLACKLIST_PATH, "r") as f:
+                data = json.load(f)
+                self.blacklisted_batches = set(data.get("blacklisted_batches", []))
+        except Exception as e:
+            logger.error(f"Errore nel caricamento della blacklist: {e}")
+            self.blacklisted_batches = set()
+
+    def save_blacklist(self) -> None:
+        try:
+            os.makedirs(os.path.dirname(BLACKLIST_PATH), exist_ok=True)
+            with open(BLACKLIST_PATH, "w") as f:
+                json.dump({
+                    "blacklisted_batches": list(self.blacklisted_batches)
+                }, f, indent=2)
+        except Exception as e:
+            logger.error(f"Errore nel salvataggio della blacklist: {e}")
+
+    def set_simulation_settings(self, date_str: Optional[str], batches: list[str]) -> None:
+        self.simulated_date = date_str if date_str else None
+        self.blacklisted_batches = set(batches)
+        self.save_blacklist()
 
     def load_db(self) -> None:
         if not os.path.exists(DB_PATH):
@@ -61,6 +92,9 @@ class StateMachine:
         Ritorna un dizionario con: {'status': 'OK'/'ALERT', 'message': '...', 'asset': asset_dict}
         """
         asset = self.get_asset(epc)
+
+        print(f"Processing read for EPC: {epc} at {read_point}. Asset found: {bool(asset)}")
+        print(f"Asset details: {asset}")
         
         if not asset:
             return {
@@ -72,7 +106,7 @@ class StateMachine:
         # Il farmaco esiste. Verifico le regole di validità (es. scadenza o ritiri).
         current_state = asset.get("currentState")
         is_expired = self._is_expired(asset.get("expiryDate"))
-        is_blacklisted = asset.get("batch") == "B-BLACKLISTED" # Regola mock per simulare un lotto ritirato
+        is_blacklisted = asset.get("batch") in self.blacklisted_batches
         
         alert_msgs = []
         if is_expired:
@@ -86,29 +120,29 @@ class StateMachine:
 
         if read_point == "PACKAGING_LINE":
             new_state = "PACKED"
-            action = "COMMISSIONING"
+            action = "PACK"
             
         elif read_point == "SMART_TRUCK":
             new_state = "DISTRIBUTING"
-            action = "DISTRIBUTE"
-            if current_state not in ["PACKED", "IN_CABINET"]:
-                alert_msgs.append("Transizione anomala: Camion senza imballaggio.")
+            action = "LOAD"
+            if current_state not in ["PACKED"]:
+                alert_msgs.append("Transizione anomala: L'asset non è stato registrato sulla linea di confezionamento prima di essere caricato sul camion.")
                 
         elif read_point == "SMART_CABINET":
             new_state = "STORED"
             action = "STORE"
-            if current_state not in ["DISTRIBUTING", "PACKED", "IN_CABINET"]:
+            if current_state not in ["DISTRIBUTING", "STORED"]:
                 alert_msgs.append("Transizione anomala: Arrivato in armadio senza transito.")
 
         elif read_point == "DESK":
             new_state = "DISPENSED"
-            action = "DISPENSE"
-            if current_state != "IN_CABINET":
+            action = "SELL"
+            if current_state != "STORED":
                 alert_msgs.append("ATTENZIONE: Prelevato senza passare per lo Smart Cabinet!")
                 
         elif read_point == "WASTE_CONTAINER":
             new_state = "DISPOSED"
-            action = "DISPOSE"
+            action = "THROW"
 
         # Update asset
         asset["currentState"] = new_state
@@ -176,7 +210,13 @@ class StateMachine:
             return False
         try:
             expiry_date = datetime.datetime.strptime(expiry_date_str, "%Y-%m-%d")
-            return datetime.datetime.now() > expiry_date
+            
+            if self.simulated_date:
+                current_eval_date = datetime.datetime.strptime(self.simulated_date, "%Y-%m-%d")
+            else:
+                current_eval_date = datetime.datetime.now()
+                
+            return current_eval_date > expiry_date
         except:
             return False
 

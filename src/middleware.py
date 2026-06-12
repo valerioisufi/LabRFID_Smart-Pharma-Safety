@@ -184,20 +184,7 @@ class Middleware:
         if self.on_state_update:
             self.on_state_update()
 
-    def trigger_external_event(self, event_type: str) -> str:
-        # todo da sistemare
-        if event_type == "SIMULATE_MIDNIGHT":
-            asset = self.state_machine.get_asset("PHARMA-0001")
-            if asset:
-                asset["expiryDate"] = "2020-01-01"
-                self.state_machine.save_db()
-                self._trigger_state_update()
-                return "Midnight simulated: PHARMA-0001 is now expired."
-        elif event_type == "WITHDRAW_LOT":
-            for key, asset in self.state_machine.assets.items():
-                if asset["batch"] == "B-NEW":
-                    asset["batch"] = "B-BLACKLISTED"
-            self.state_machine.save_db()
-            self._trigger_state_update()
-            return "Lot withdrawal simulated: B-NEW is now blacklisted."
-        return "Unknown event."
+    def set_simulation_settings(self, date_str: Optional[str], batches_str: str) -> None:
+        batches = [b.strip() for b in batches_str.split(',')] if batches_str.strip() else []
+        self.state_machine.set_simulation_settings(date_str, batches)
+        self._trigger_state_update()

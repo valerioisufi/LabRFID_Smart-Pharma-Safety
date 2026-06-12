@@ -21,9 +21,20 @@ function connectWebSocket() {
 }
 
 function updateState(state) {
-    // Update theme/context
     document.body.setAttribute('data-context', state.read_point);
     document.getElementById('readPointSelect').value = state.read_point;
+    
+    // Update Simulation Settings if they are not currently focused to avoid overwriting user typing
+    if (state.simulation_settings) {
+        const simDateInput = document.getElementById('sim-date');
+        const simBatchesInput = document.getElementById('sim-batches');
+        if (document.activeElement !== simDateInput) {
+            simDateInput.value = state.simulation_settings.simulated_date;
+        }
+        if (document.activeElement !== simBatchesInput) {
+            simBatchesInput.value = state.simulation_settings.blacklisted_batches;
+        }
+    }
     
     // Toggle Commission Form visibility
     const commissionForm = document.getElementById('commission-form');
@@ -240,6 +251,20 @@ async function startBatch() {
 
 async function stopBatch() {
     await fetch('/api/stop_batch', { method: 'POST' });
+}
+
+async function applySimulationSettings() {
+    const simDate = document.getElementById('sim-date').value;
+    const simBatches = document.getElementById('sim-batches').value;
+    
+    await fetch('/api/simulation_settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ 
+            simulated_date: simDate, 
+            blacklisted_batches: simBatches 
+        })
+    });
 }
 
 function appendSystemLog(logText, level = "INFO") {

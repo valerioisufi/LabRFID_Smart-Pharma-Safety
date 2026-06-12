@@ -37,6 +37,17 @@
         </div>
 
         <div class="control-group" style="margin-top: 20px;">
+            <label>Simulation Settings</label>
+            <div style="margin-top: 8px;">
+                <label style="font-size: 11px; color: var(--text-secondary);">Simulated Current Date</label>
+                <input type="date" id="sim-date" style="width: 100%; margin-bottom: 8px;">
+                <label style="font-size: 11px; color: var(--text-secondary);">Withdrawn Batches (comma separated)</label>
+                <input type="text" id="sim-batches" placeholder="B-2026-X, B-2027-Y" style="width: 100%; margin-bottom: 12px;">
+                <button onclick="applySimulationSettings()" style="width: 100%; font-size: 13px;">Apply Simulation</button>
+            </div>
+        </div>
+
+        <div class="control-group" style="margin-top: 20px;">
             <label>Reading Engine</label>
             <button id="btn-monitor" onclick="toggleMonitor()">▶ Start Monitoring</button>
             <p style="font-size: 11px; color: var(--text-secondary); margin-top: 8px;">

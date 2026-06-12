@@ -130,7 +130,11 @@ async def send_state_update() -> None:
         "batch_active": middleware.active_batch_config is not None,
         "kpis": middleware.get_kpis(),
         "events": middleware.get_all_events()[-50:],
-        "system_logs": list(deque_handler.logs)
+        "system_logs": list(deque_handler.logs),
+        "simulation_settings": {
+            "simulated_date": middleware.state_machine.simulated_date or "",
+            "blacklisted_batches": ",".join(middleware.state_machine.blacklisted_batches)
+        }
     }
     await manager.broadcast(json.dumps(state))
 
@@ -190,12 +194,12 @@ async def stop_batch():
     middleware.stop_batch()
     return {"status": "success"}
 
-@app.post("/api/trigger_event")
-async def trigger_event(data: dict):
-    # Route dimostrativa (era trigger_external_event nel middleware originale)
-    event_type = data.get("event_type")
-    msg = middleware.trigger_external_event(event_type)
-    return {"status": "success", "message": msg}
+@app.post("/api/simulation_settings")
+async def simulation_settings(data: dict):
+    simulated_date = data.get("simulated_date")
+    blacklisted_batches = data.get("blacklisted_batches", "")
+    middleware.set_simulation_settings(simulated_date, blacklisted_batches)
+    return {"status": "success"}
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
