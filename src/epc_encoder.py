@@ -50,7 +50,7 @@ def encode_sgtin96(gtin: str, serial: int, prefix_length: int = 7) -> str:
     
     return f"{epc:024X}"
 
-def encode_dsgtin128(gtin: str, serial: str, expiry_date: datetime.date, filter_value: int = 2) -> str:
+def encode_dsgtin128(gtin: str, serial: str, expiry_date: datetime.date, filter_value: int = 1) -> str:
     """
     Codifica un DSGTIN+ (Date-prioritized SGTIN) a 128 bit.
     Questo formato è ideale per la filiera dei deperibili, in quanto espone la data
@@ -60,7 +60,7 @@ def encode_dsgtin128(gtin: str, serial: str, expiry_date: datetime.date, filter_
         gtin: Stringa GTIN a 14 cifre.
         serial: Numero seriale (stringa esadecimale o alfanumerica).
         expiry_date: Data di scadenza.
-        filter_value: Valore di filtro (default 2 per Full Case, 1 per Point-of-Sale).
+        filter_value: Valore di filtro (default 1 per Point-of-Sale).
         
     Ritorna:
         Una stringa esadecimale di 32 caratteri che rappresenta l'EPC a 128 bit.

@@ -320,7 +320,7 @@ class TertiumReader:
         
     def get_operation_mode(self):
         """
-        Tenta di leggere la configurazione attuale del SETMODE (0E)
+        Legge la configurazione attuale del SETMODE (0E)
         inviando il comando senza parametri.
         
         Returns:
@@ -581,6 +581,8 @@ class TertiumReader:
         Args:
             callback (function): Function to call when a tag is detected.
         """
+
+        # TODO da spostare altrove
         if not getattr(self, '_initial_sync_done', False):
             raise TertiumError("Hardware not synced. Call open() and ensure initialization is complete before operating.")
 
