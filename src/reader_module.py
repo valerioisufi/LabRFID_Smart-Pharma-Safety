@@ -1,30 +1,21 @@
-import time
 import logging
 import threading
-from typing import Optional, Callable, Any
+from typing import Optional, Callable
 
-try:
-    from src.tertium_serial_handler import TertiumReader
-    TERTIUM_AVAILABLE = True
-except ImportError:
-    TERTIUM_AVAILABLE = False
+from src.tertium_serial_handler import TertiumReader
 
 logger = logging.getLogger(__name__)
 
 class ReaderManager:
     """Livello di astrazione hardware (HAL) che gestisce la connessione con il lettore RFID."""
     def __init__(self, port: Optional[str] = None) -> None:
-        import sys
         if port is None:
-            port = "/dev/cu.usbserial-1110" if sys.platform == "darwin" else "COM3"
-        self.port = port
-        self.reader = None
-        self.async_thread = None
+            port = "COM3"
+        self.port: str = port
+        self.reader: Optional[TertiumReader] = None
+        self.async_thread: Optional[threading.Thread] = None
         
     def connect(self) -> bool:
-        if not TERTIUM_AVAILABLE:
-            logger.error("Modulo TertiumReader non trovato.")
-            return False
             
         self.reader = TertiumReader(port=self.port, rssi_enabled=False)
             
@@ -44,7 +35,7 @@ class ReaderManager:
     def is_connected(self) -> bool:
         if not self.reader:
             return False
-        return hasattr(self.reader, 'ser') and self.reader.ser is not None and self.reader.ser.is_open
+        return self.reader.ser is not None and self.reader.ser.is_open
 
     def configure_for_read_point(self, read_point: str) -> None:
         """Regola le impostazioni del lettore (potenza e modalità) in base all'ambiente fisico."""
@@ -75,7 +66,7 @@ class ReaderManager:
         
     def stop_async_reading(self) -> None:
         """Ferma il thread di lettura in background."""
-        if self.reader and hasattr(self.reader, 'stop_listening'):
+        if self.reader:
             self.reader.stop_listening()
             
     def read_tags(self) -> list[str]:
