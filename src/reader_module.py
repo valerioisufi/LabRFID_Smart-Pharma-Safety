@@ -84,7 +84,7 @@ class ReaderManager:
     def write_new_epc(self, new_epc_hex: str) -> tuple[bool, str]:
         """
         Legge il primo tag disponibile nel raggio d'azione e sovrascrive la sua memoria EPC
-        con il nuovo codice EPC SGTIN-96.
+        con il nuovo codice EPC.
         """
         if not self.reader or not self.is_connected:
             return False, "Lettore non connesso"
@@ -103,7 +103,7 @@ class ReaderManager:
                 data=new_epc_hex, 
                 mem_bank="01", 
                 address="02", 
-                block_num="06", 
+                block_num="08", # 1 blocco per ogni word (1 word = 2 byte)
                 timeout_ms=2000
             )
             

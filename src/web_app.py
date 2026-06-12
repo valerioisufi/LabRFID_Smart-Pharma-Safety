@@ -64,7 +64,7 @@ app.mount("/static", StaticFiles(directory=str(Path(__file__).resolve().parent /
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
 
 # Stato Globale dell'Applicazione
-default_port: str = "/dev/cu.usbserial-1110" if sys.platform == "darwin" else "COM3"
+default_port: str = "COM3"
 middleware: Middleware = Middleware()
 reader_manager: ReaderManager = ReaderManager(port=default_port)
 current_read_point: str = "PACKAGING_LINE"
