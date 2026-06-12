@@ -89,15 +89,15 @@ class StateMachine:
             action = "COMMISSIONING"
             
         elif read_point == "SMART_TRUCK":
-            new_state = "IN_TRANSIT"
+            new_state = "DISTRIBUTING"
             action = "DISTRIBUTE"
             if current_state not in ["PACKED", "IN_CABINET"]:
                 alert_msgs.append("Transizione anomala: Camion senza imballaggio.")
                 
         elif read_point == "SMART_CABINET":
-            new_state = "IN_CABINET"
+            new_state = "STORED"
             action = "STORE"
-            if current_state not in ["IN_TRANSIT", "PACKED", "IN_CABINET"]:
+            if current_state not in ["DISTRIBUTING", "PACKED", "IN_CABINET"]:
                 alert_msgs.append("Transizione anomala: Arrivato in armadio senza transito.")
 
         elif read_point == "DESK":
@@ -136,7 +136,7 @@ class StateMachine:
             pass
 
     def commission_asset(self, epc, gtin, batch, expiry_date, aic, old_epc=None):
-        """Official Commissioning with SGTIN-96 encoding and GS1 metadata."""
+        """Official Commissioning with DSGTIN-128 encoding and GS1 metadata."""
         new_asset = {
             "epc": epc,
             "gtin": gtin,
@@ -179,3 +179,26 @@ class StateMachine:
             return datetime.datetime.now() > expiry_date
         except:
             return False
+
+    def get_kpis(self) -> dict[str, int]:
+        """Calcola e restituisce i KPI attuali del sistema."""
+        assets_list = self.assets.values()
+        return {
+            "total_assets": len(assets_list),
+            "packed": sum(1 for a in assets_list if a.get("currentState") == "PACKED"),
+            "distributing": sum(1 for a in assets_list if a.get("currentState") == "DISTRIBUTING"),
+            "in_cabinet": sum(1 for a in assets_list if a.get("currentState") == "IN_CABINET"),
+            "dispensed": sum(1 for a in assets_list if a.get("currentState") == "DISPENSED"),
+            "disposed": sum(1 for a in assets_list if a.get("currentState") == "DISPOSED"),
+            "expired": sum(1 for a in assets_list if self._is_expired(a.get("expiryDate")))
+        }
+
+    def get_epcs_by_batch(self, batch_name: str) -> set[str]:
+        """Restituisce un set con tutti gli EPC appartenenti a un determinato lotto, inclusi i vecchi EPC se presenti."""
+        epcs = set()
+        for epc, asset in self.assets.items():
+            if asset.get("batch") == batch_name:
+                epcs.add(epc)
+                if asset.get("oldEpc"):
+                    epcs.add(asset.get("oldEpc"))
+        return epcs
