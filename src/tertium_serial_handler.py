@@ -24,7 +24,7 @@ class TertiumReader:
     # --- PROTOCOL CONSTANTS ---
     CMD_BEEPER = "01"
     CMD_LED = "02"
-    CMD_MODE = "0D"        # Volatile mode (current session only)
+    CMD_MODE = "06"        # Volatile mode (current session only)
     CMD_SET_MODE = "0E"    # Persistent mode (saves to EEPROM)
     CMD_SET_STANDARD = "0F"
     CMD_INVENTORY = "11"
@@ -165,6 +165,7 @@ class TertiumReader:
             self.logger.error(f"Timeout waiting for command {cmd_code}")
             return None
         
+        self.logger.debug(f"Raw response for command {cmd_code}: {raw_resp}")
         return raw_resp
 
     # --- DIAGNOSTIC & HARDWARE COMMANDS ---
@@ -255,7 +256,7 @@ class TertiumReader:
             return True
         return False
     
-    def set_current_mode(self, mode="00", local="00", id_format="00", t_scan="05", t_interval="05"):
+    def set_current_mode(self, mode="00"):
         """
         Sets the current operation mode (Command 0D). 
         This is VOLATILE: settings are lost when the reader is powered off.
@@ -277,15 +278,41 @@ class TertiumReader:
         Returns:
             bool: True if configuration was setted.
         """
-        params = (f"{str(mode).zfill(2).upper()}{str(local).zfill(2).upper()}"
-                  f"{str(id_format).zfill(2).upper()}00{str(t_scan).zfill(2).upper()}"
-                  f"{str(t_interval).zfill(2).upper()}")
+        params = f"{str(mode).zfill(2).upper()}"
+
         resp = self.send_command(self.CMD_MODE, params)
         if resp and len(resp) >= 8 and resp[6:8] == self.RET_SUCCESS:
-            self.id_format = str(id_format).zfill(2).upper()
             self.logger.info("Current operation mode set successfully (Volatile).")
             return True
         return False
+    
+    def get_current_mode(self):
+        """
+        Reads the current operation mode configuration by sending the 06 command without parameters.
+        
+        Returns:
+            dict: Dictionary with decoded parameters, or None in case of error/timeout.
+        """
+        resp = self.send_command(self.CMD_MODE, "")
+        
+        if resp:
+            if len(resp) >= 14 and resp[6:8] == self.RET_SUCCESS:
+                try:
+                    mode_config = {
+                        "mode": resp[12:14]
+                    }
+                    self.logger.info(f"Current mode configuration read successfully: {mode_config}")
+                    return mode_config
+                except IndexError:
+                    self.logger.error(f"Truncated or malformed response: {resp}")
+            elif len(resp) >= 8 and resp[6:8] != self.RET_SUCCESS:
+                self.logger.error(f"Reader returned error code: {resp[6:8]} in string {resp}")
+            else:
+                self.logger.error(f"Unexpected format: {resp}")
+        else:
+            self.logger.warning("Timeout. The RE40 module did not respond.")
+            
+        return None
 
     def set_operation_mode(self, mode="00", local="00", id_format="00", t_scan="05", t_interval="05"):
         """
@@ -335,28 +362,31 @@ class TertiumReader:
         # Inviamo il comando 0E senza parametri
         resp = self.send_command(self.CMD_SET_MODE, "")
         
-        # Risposta attesa (se supportata): 
-        # $: LL SS [00] [mode] [local] [id_format] [max_num] [tscan] [tinterval]
-        # Minimo 6 byte di header/retcode + 12 char di parametri = 18 char
+        # Risposta attesa: 
+        # $: [LL] [SS] [RR] [mode] [local] [id_format] [max_num] [tscan] [tinterval]
+        # Dove [RR] è il Return Code (indice 6:8)
+        # Minimo 20 caratteri prima del terminatore di linea
         if resp:
-            if len(resp) >= 18 and resp[4:6] == self.RET_SUCCESS:
+            if len(resp) >= 20 and resp[6:8] == self.RET_SUCCESS:
                 try:
                     mode_config = {
-                        "mode": resp[6:8],
-                        "local": resp[8:10],
-                        "id_format": resp[10:12],
-                        "max_num": resp[12:14],
-                        "tscan": resp[14:16],
-                        "tinterval": resp[16:18]
+                        "mode": resp[8:10],
+                        "local": resp[10:12],
+                        "id_format": resp[12:14],
+                        "max_num": resp[14:16],
+                        "tscan": resp[16:18],
+                        "tinterval": resp[18:20]
                     }
                     self.logger.info(f"Configurazione letta con successo: {mode_config}")
                     return mode_config
                 except IndexError:
                     self.logger.error(f"Risposta troncata o malformata: {resp}")
+            elif len(resp) >= 8 and resp[6:8] != self.RET_SUCCESS:
+                self.logger.error(f"Il lettore ha restituito un codice di errore: {resp[6:8]} nella stringa {resp}")
             else:
-                self.logger.error(f"Il lettore ha risposto con un errore o formato inatteso: {resp}")
+                self.logger.error(f"Formato inatteso: {resp}")
         else:
-            self.logger.warning("Timeout. Il modulo RE40 non supporta la lettura del comando SETMODE (write-only).")
+            self.logger.warning("Timeout. Il modulo RE40 non ha risposto.")
             
         return None
         
