@@ -201,7 +201,7 @@ class TertiumReader:
             self.ser.write(self._calculate_frame(self.CMD_SET_STANDARD, "FF"))
             time.sleep(2.0)
 
-    def beep(self, freq_hz=1000, duration_ms=200):
+    def beep(self, freq_hz=500, duration_ms=30):
         """
         Activates the beeper.
         
@@ -225,13 +225,18 @@ class TertiumReader:
             red_status (str): Red LED Status (00=OFF, FF=ON, intermediate=Blinking).
             green_status (str): Green LED Status (00=OFF, FF=ON, intermediate=Blinking).
             color (str): (Optional) Color code for RGB models (e.g., RE40 Scanner).
-                         01=Red, 02=Green, 04=Blue, 07=White.
+                         01=Red, 02=Green, 03=Yellow, 04=Blue, 05=Magenta, 06=Cyan, 07=White.
 
         Returns:
             bool: True if operation successful.
         """
-        params = f"{red_status.upper().zfill(2)}{green_status.upper().zfill(2)}{f'{int(color):02X}' if color else ''}"
+        # Trattiamo tutti i parametri in modo omogeneo come stringhe esadecimali
+        color_str = color.upper().zfill(2) if color else ""
+        params = f"{red_status.upper().zfill(2)}{green_status.upper().zfill(2)}{color_str}"
+        
         resp = self.send_command(self.CMD_LED, params)
+        
+        # $: 06 00 [retcode] CR
         return resp and len(resp) >= 8 and resp[6:8] == self.RET_SUCCESS
 
     # --- CONFIGURATION COMMANDS ---

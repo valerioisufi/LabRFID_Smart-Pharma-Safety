@@ -22,14 +22,13 @@ class ReaderManager:
         try:
             self.reader.open()
             self.reader.set_led(red_status="FF") # Red light during connection attempt
-            self.reader.set_operation_mode(id_format="02")
+            self.reader.set_operation_mode(local="01", id_format="02")
             return True
         except Exception as e:
             logger.error(f"Impossibile connettersi al lettore: {e}")
             return False
             
     def disconnect(self) -> None:
-        self.stop_async_reading()
         if self.reader:
             self.reader.close()
             
@@ -44,6 +43,8 @@ class ReaderManager:
         if not self.reader or not self.is_connected:
             return
             
+        self.reader.set_led(green_status="FF")
+
         if read_point == "DESK":
             self.reader.set_power(0x1B) # Potenza minima
         elif read_point == "SMART_CABINET" or read_point == "SMART_TRUCK":
@@ -53,13 +54,14 @@ class ReaderManager:
             
         # Imposta sempre il lettore in modalità Standard (00)
         # Sarà il Middleware Python a decidere quando scansionare facendo polling.
-        self.reader.set_current_mode(mode="00", id_format="02")
+        self.reader.set_current_mode(mode="00")
             
     def read_tags(self) -> list[str]:
         """Esegue una singola scansione di inventario (Modalità Normale) e ritorna una lista di EPC."""
         if not self.reader or not self.is_connected:
             return []
-            
+        
+
         tags = self.reader.inventory(timeout_ms=500)
         
         # Se il lettore ritorna una lista di tuple (EPC, RSSI), estraiamo solo gli EPC
