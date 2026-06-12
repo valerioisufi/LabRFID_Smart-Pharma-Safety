@@ -12,7 +12,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 class ReaderManager:
-    """Hardware Abstraction Layer managing the reader connection."""
+    """Livello di astrazione hardware (HAL) che gestisce la connessione con il lettore RFID."""
     def __init__(self, port: Optional[str] = None) -> None:
         import sys
         if port is None:
@@ -23,7 +23,7 @@ class ReaderManager:
         
     def connect(self) -> bool:
         if not TERTIUM_AVAILABLE:
-            logger.error("TertiumReader module not found.")
+            logger.error("Modulo TertiumReader non trovato.")
             return False
             
         self.reader = TertiumReader(port=self.port, rssi_enabled=False)
@@ -32,7 +32,7 @@ class ReaderManager:
             self.reader.open()
             return True
         except Exception as e:
-            logger.error(f"Failed to connect to reader: {e}")
+            logger.error(f"Impossibile connettersi al lettore: {e}")
             return False
             
     def disconnect(self) -> None:
@@ -47,58 +47,58 @@ class ReaderManager:
         return hasattr(self.reader, 'ser') and self.reader.ser is not None and self.reader.ser.is_open
 
     def configure_for_read_point(self, read_point: str) -> None:
-        """Adjusts reader settings based on the physical environment."""
+        """Regola le impostazioni del lettore (potenza e modalità) in base all'ambiente fisico."""
         if not self.reader or not self.is_connected:
             return
             
         if read_point == "DESK":
-            self.reader.set_power(0x1B) # Min power
-            self.reader.set_current_mode(mode="01") # Time-based auto scan
+            self.reader.set_power(0x1B) # Potenza minima (per evitare di leggere tag lontani dalla scrivania)
+            self.reader.set_current_mode(mode="01") # Scansione automatica basata sul tempo
         elif read_point == "SMART_TRUCK" or read_point == "SMART_CABINET":
-            self.reader.set_power(0x00) # Max power
-            self.reader.set_current_mode(mode="00") # Normal (manual inventory)
+            self.reader.set_power(0x00) # Potenza massima (per leggere tutto il contenuto dell'armadio/camion)
+            self.reader.set_current_mode(mode="00") # Normale (inventario manuale, attivato a richiesta)
         elif read_point == "WASTE_CONTAINER" or read_point == "PACKAGING_LINE":
-            self.reader.set_power(0x0A) # Medium power
-            self.reader.set_current_mode(mode="01") # Time-based auto scan
+            self.reader.set_power(0x0A) # Potenza media
+            self.reader.set_current_mode(mode="01") # Scansione automatica basata sul tempo
 
     def start_async_reading(self, callback: Callable[[list[str]], None]) -> None:
-        """Starts a background thread to continuously read tags."""
+        """Avvia un thread in background per leggere i tag in modo continuo."""
         if not self.reader or not self.is_connected:
             return
             
         if self.async_thread and self.async_thread.is_alive():
-            return # Already running
+            return # Già in esecuzione
             
         self.async_thread = threading.Thread(target=self.reader.listen_async, args=(callback,))
         self.async_thread.daemon = True
         self.async_thread.start()
         
     def stop_async_reading(self) -> None:
-        """Stops the background reading thread."""
+        """Ferma il thread di lettura in background."""
         if self.reader and hasattr(self.reader, 'stop_listening'):
             self.reader.stop_listening()
             
     def read_tags(self) -> list[str]:
-        """Performs a single inventory scan (Normal mode) and returns a list of EPCs."""
+        """Esegue una singola scansione di inventario (Modalità Normale) e ritorna una lista di EPC."""
         if not self.reader or not self.is_connected:
             return []
             
         tags = self.reader.inventory(timeout_ms=500)
         
-        # If it's a list of tuples (EPC, RSSI), extract just the EPCs
+        # Se il lettore ritorna una lista di tuple (EPC, RSSI), estraiamo solo gli EPC
         if tags and isinstance(tags[0], tuple):
             return [t[0] for t in tags]
         return tags
 
     def write_new_epc(self, new_epc_hex: str) -> tuple[bool, str]:
         """
-        Reads the first available tag in range, and overwrites its EPC memory
-        with the new SGTIN-96 EPC.
+        Legge il primo tag disponibile nel raggio d'azione e sovrascrive la sua memoria EPC
+        con il nuovo codice EPC SGTIN-96.
         """
         if not self.reader or not self.is_connected:
-            return False, "Reader not connected"
+            return False, "Lettore non connesso"
             
-        # First, find a tag to write to
+        # Prima di tutto, cerca un tag fisico nel campo a cui scrivere
         tags = self.read_tags()
         if not tags:
             return False, "Nessun tag fisico rilevato nel raggio d'azione."
@@ -106,7 +106,7 @@ class ReaderManager:
         target_epc = tags[0]
         
         try:
-            # write_memory args: epc, data, mem_bank="01" (EPC), address="02" (Word 2), block_num="06" (6 words = 96 bits)
+            # Parametri per write_memory: epc (target), data (nuovo valore), mem_bank="01" (Banco EPC), address="02" (Inizia dalla Word 2 per saltare CRC e PC), block_num="06" (Scrive 6 word = 96 bit)
             retcode = self.reader.write_memory(
                 epc=target_epc, 
                 data=new_epc_hex, 
@@ -117,9 +117,9 @@ class ReaderManager:
             )
             
             if retcode == "00":
-                return True, target_epc # Return the old EPC just for reference
+                return True, target_epc # Ritorna il vecchio EPC per riferimento visivo
             else:
                 return False, f"Errore scrittura (Retcode: {retcode})"
         except Exception as e:
-            logger.error(f"Write error: {e}")
+            logger.error(f"Errore in scrittura: {e}")
             return False, str(e)

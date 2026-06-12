@@ -12,14 +12,14 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-# Add project root to path
+# Aggiunge la root del progetto al path di sistema per permettere gli import assoluti
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from src.reader_module import ReaderManager
 from src.middleware import Middleware
 
 
-# Custom Log Handler to capture logs for the Web UI
+# Handler personalizzato per il logging: cattura i log di sistema per inviarli alla UI Web in tempo reale
 class DequeHandler(logging.Handler):
     def __init__(self, maxlen=100):
         super().__init__()
@@ -59,11 +59,11 @@ async def lifespan(app: FastAPI):
 
 app: FastAPI = FastAPI(lifespan=lifespan)
 
-# Setup static files and templates
+# Configurazione per servire file statici (CSS, JS) e template HTML (Jinja2)
 app.mount("/static", StaticFiles(directory=str(Path(__file__).resolve().parent / "static")), name="static")
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
 
-# Global State
+# Stato Globale dell'Applicazione
 default_port: str = "/dev/cu.usbserial-1110" if sys.platform == "darwin" else "COM3"
 middleware: Middleware = Middleware()
 reader_manager: ReaderManager = ReaderManager(port=default_port)
@@ -74,7 +74,7 @@ active_batch_config: Optional[Dict[str, Any]] = None
 processed_in_batch: set[str] = set()
 
 
-# WebSocket Connection Manager
+# Gestore delle connessioni WebSocket (mantiene vive le connessioni con i client web)
 class ConnectionManager:
     def __init__(self) -> None:
         self.active_connections: List[WebSocket] = []
@@ -97,7 +97,7 @@ class ConnectionManager:
 manager: ConnectionManager = ConnectionManager()
 
 
-# --- HELPER FUNCTIONS ---
+# --- FUNZIONI DI SUPPORTO (HELPER) ---
 def get_kpis() -> Dict[str, int]:
     assets = middleware.state_machine.assets.values()
     return {
@@ -119,8 +119,8 @@ async def send_state_update() -> None:
         "is_connected": reader_manager.is_connected,
         "batch_active": active_batch_config is not None,
         "kpis": get_kpis(),
-        "events": middleware.get_all_events()[-50:],  # Send last 50 events
-        "system_logs": list(deque_handler.logs)  # Send the buffer of logs
+        "events": middleware.get_all_events()[-50:],  # Invia solo gli ultimi 50 eventi per non appesantire la UI
+        "system_logs": list(deque_handler.logs)  # Invia il buffer circolare dei log di sistema
     }
     await manager.broadcast(json.dumps(state))
 
@@ -137,7 +137,7 @@ async def process_and_broadcast_async_read(epc: str) -> None:
 def handle_async_read(tag_payload: Union[str, Tuple[str, Any]]) -> None:
     epc = tag_payload[0] if isinstance(tag_payload, tuple) else tag_payload
 
-    # Safely schedule on the main event loop from the background thread
+    # Programma l'esecuzione dell'aggiornamento in modo sicuro sull'event loop principale (dato che veniamo chiamati da un thread in background)
     loop = deque_handler.main_loop
     if loop and loop.is_running():
         loop.call_soon_threadsafe(

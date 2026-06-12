@@ -11,6 +11,10 @@ logger = logging.getLogger(__name__)
 DB_PATH = str(Path(__file__).resolve().parent.parent / "data" / "database.json")
 
 class StateMachine:
+    """
+    Gestisce lo stato del ciclo di vita dei farmaci (Asset) e mantiene lo storico degli eventi.
+    Agisce come un database in memoria sincronizzato su un file JSON.
+    """
     def __init__(self) -> None:
         self.assets: dict[str, dict[str, Any]] = {}
         self.events: list[dict[str, Any]] = []
@@ -30,14 +34,14 @@ class StateMachine:
                 self.events = data.get("events", [])
                 self.serial_counter = data.get("serialCounter", 1)
         except Exception as e:
-            logger.error(f"Error loading DB: {e}")
+            logger.error(f"Errore nel caricamento del database: {e}")
             self.assets = {}
             self.events = []
             self.serial_counter = 1
 
     def save_db(self) -> None:
         try:
-            # Ensure directory exists
+            # Assicura che la cartella 'data' esista prima di salvare
             os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
             with open(DB_PATH, "w") as f:
                 json.dump({
@@ -46,15 +50,15 @@ class StateMachine:
                     "serialCounter": self.serial_counter
                 }, f, indent=2)
         except Exception as e:
-            logger.error(f"Error saving DB: {e}")
+            logger.error(f"Errore nel salvataggio del database: {e}")
 
     def get_asset(self, epc: str) -> Optional[dict[str, Any]]:
         return self.assets.get(epc)
 
     def process_read(self, epc: str, read_point: str) -> dict[str, Any]:
         """
-        Core logic for State Machine.
-        Returns a dict with: {'status': 'OK'/'ALERT', 'message': '...', 'asset': asset_dict}
+        Logica centrale della Macchina a Stati. Valuta la lettura e applica le regole di business.
+        Ritorna un dizionario con: {'status': 'OK'/'ALERT', 'message': '...', 'asset': asset_dict}
         """
         asset = self.get_asset(epc)
         
@@ -65,10 +69,10 @@ class StateMachine:
                 "asset": None
             }
 
-        # Asset exists. Check rules.
+        # Il farmaco esiste. Verifico le regole di validità (es. scadenza o ritiri).
         current_state = asset.get("currentState")
         is_expired = self._is_expired(asset.get("expiryDate"))
-        is_blacklisted = asset.get("batch") == "B-BLACKLISTED" # Mock blacklist rule
+        is_blacklisted = asset.get("batch") == "B-BLACKLISTED" # Regola mock per simulare un lotto ritirato
         
         alert_msgs = []
         if is_expired:
@@ -76,7 +80,7 @@ class StateMachine:
         if is_blacklisted:
             alert_msgs.append("LOTTO RITIRATO (BLACKLIST)!")
 
-        # Determine new state based on read_point
+        # Determina il nuovo stato logico in base al punto in cui è avvenuta la lettura fisica
         new_state = current_state
         action = "READ"
 
