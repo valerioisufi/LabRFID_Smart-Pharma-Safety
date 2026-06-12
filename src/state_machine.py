@@ -123,7 +123,7 @@ class StateMachine:
         if is_expired:
             alert_msgs.append("FARMACO SCADUTO!")
         if is_blacklisted:
-            alert_msgs.append("LOTTO RITIRATO (BLACKLIST)!")
+            alert_msgs.append("LOTTO RITIRATO!")
 
         # Determina il nuovo stato logico in base al punto in cui è avvenuta la lettura fisica
         new_state = current_state
@@ -136,7 +136,7 @@ class StateMachine:
         elif read_point == "SMART_TRUCK":
             new_state = "DISTRIBUTING"
             action = "LOAD"
-            if current_state not in ["PACKED"]:
+            if current_state not in ["PACKED", "DISTRIBUTING"]:
                 alert_msgs.append("Transizione anomala: L'asset non è stato registrato sulla linea di confezionamento prima di essere caricato sul camion.")
                 
         elif read_point == "SMART_CABINET":
@@ -157,7 +157,7 @@ class StateMachine:
 
         # Update asset
         asset["currentState"] = new_state
-        asset["lastUpdate"] = datetime.datetime.utcnow().isoformat() + "Z"
+        asset["lastUpdate"] = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat() + "Z"
         self.assets[epc] = asset
         
         # Log event
@@ -190,7 +190,7 @@ class StateMachine:
             "aic": aic,
             "serialNumber": self.serial_counter,
             "currentState": "PACKED",
-            "lastUpdate": datetime.datetime.utcnow().isoformat() + "Z",
+            "lastUpdate": datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat() + "Z",
             "oldEpc": old_epc
         }
         
@@ -208,7 +208,7 @@ class StateMachine:
         event = {
             "eventId": str(uuid.uuid4()),
             "epc": epc,
-            "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat() + "Z",
             "readPoint": read_point,
             "action": action,
             "newState": new_state,
@@ -238,7 +238,7 @@ class StateMachine:
             "total_assets": len(assets_list),
             "packed": sum(1 for a in assets_list if a.get("currentState") == "PACKED"),
             "distributing": sum(1 for a in assets_list if a.get("currentState") == "DISTRIBUTING"),
-            "in_cabinet": sum(1 for a in assets_list if a.get("currentState") == "IN_CABINET"),
+            "in_cabinet": sum(1 for a in assets_list if a.get("currentState") == "STORED"),
             "dispensed": sum(1 for a in assets_list if a.get("currentState") == "DISPENSED"),
             "disposed": sum(1 for a in assets_list if a.get("currentState") == "DISPOSED"),
             "expired": sum(1 for a in assets_list if self._is_expired(a.get("expiryDate")))

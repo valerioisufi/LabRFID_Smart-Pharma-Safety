@@ -232,17 +232,61 @@ h1 {
     flex-direction: column;
 }
 
-/* Reader Logs Console in Sidebar */
+/* Floating Terminal Console (VS Code style bottom panel) */
+#floating-console {
+    position: fixed;
+    bottom: 0;
+    left: 320px; /* Ignora la larghezza della sidebar sinistra */
+    right: 0;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: var(--bg-main);
+    border-top: 1px solid var(--border);
+}
+
+#floating-console.collapsed {
+    transform: translateY(calc(100% - 44px)); /* Nasconde il corpo, lascia l'header */
+}
+
+.console-header {
+    padding: 12px 24px;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+}
+
+#console-toggle-icon {
+    transition: transform 0.3s ease;
+}
+
+#floating-console.collapsed #console-toggle-icon {
+    transform: rotate(180deg);
+}
+
+.console-header:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
 .console-body {
-    height: 180px;
+    height: 200px;
     overflow-y: auto;
-    padding: 10px;
+    padding: 16px 24px;
     font-family: 'Courier New', Courier, monospace;
-    font-size: 11px;
-    background: rgba(0, 0, 0, 0.4);
-    color: #a7f3d0; /* Soft emerald green for reader logs */
-    border: 1px solid var(--border);
-    border-radius: 8px;
+    font-size: 12px;
+    background: rgba(0, 0, 0, 0.5);
+    color: #a7f3d0;
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -330,15 +374,11 @@ body[data-context="SMART_CABINET"] .glow {
     background: radial-gradient(circle, rgba(14,165,233,0.1) 0%, rgba(0,0,0,0) 70%);
 }
 body[data-context="DESK"] {
-    --bg-main: #f8fafc;
-    --bg-panel: rgba(255, 255, 255, 0.8);
-    --text-primary: #0f172a;
-    --text-secondary: #64748b;
-    --border: rgba(0, 0, 0, 0.1);
-    --accent: #0284c7;
+    --bg-main: #041f1e; /* Deep dark teal background */
+    --accent: #14b8a6;  /* Medical Teal */
 }
 body[data-context="DESK"] .glow {
-    background: radial-gradient(circle, rgba(2,132,199,0.05) 0%, rgba(0,0,0,0) 70%);
+    background: radial-gradient(circle, rgba(20,184,166,0.1) 0%, rgba(0,0,0,0) 70%);
 }
 body[data-context="WASTE_CONTAINER"] {
     --accent: #ef4444;

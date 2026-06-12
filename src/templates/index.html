@@ -13,7 +13,7 @@
     <!-- SIDEBAR -->
     <aside id="sidebar">
         <div class="logo">
-            <span style="font-size: 28px;">🛡️</span> Smart Pharma
+            Smart Pharma
         </div>
         
         <div class="control-group">
@@ -55,13 +55,7 @@
             </p>
         </div>
 
-        <!-- READER LOGS CONSOLE -->
-        <div class="control-group" style="margin-top: auto; display: flex; flex-direction: column; gap: 8px;">
-            <label>📟 Reader Logs</label>
-            <div id="console-body" class="console-body">
-                <!-- Log entries will be added here -->
-            </div>
-        </div>
+        <!-- CONSOLE REMOVED FROM HERE -->
     </aside>
 
     <!-- MAIN CONTENT -->
@@ -140,6 +134,25 @@
 
     </main>
 
+    <!-- FLOATING TERMINAL -->
+    <div id="floating-console" class="glass-panel">
+        <div class="console-header" onclick="toggleConsole()">
+            <span>Reader Logs</span>
+            <svg id="console-toggle-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+        </div>
+        <div id="console-body" class="console-body">
+            <!-- Log entries will be added here -->
+        </div>
+    </div>
+
+    <script>
+        function toggleConsole() {
+            const consoleEl = document.getElementById('floating-console');
+            consoleEl.classList.toggle('collapsed');
+        }
+    </script>
     <script src="/static/script.js"></script>
 </body>
 </html>
