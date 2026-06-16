@@ -1,6 +1,5 @@
 import serial
 import time
-import time
 import logging
 from typing import Optional, Union, Any, List, Tuple
 
@@ -44,9 +43,6 @@ class TertiumReader:
 
     def __init__(self, port: str, baudrate: int = 38400, timeout: int = 3, rssi_enabled: bool = False, logger: Optional[logging.Logger] = None) -> None:
         """
-        Initializes the reader. Accepts an optional logger instance.
-        """
-        """
         Initializes the serial connection with the Tertium RFID reader.
         
         Standard port configuration:
@@ -70,7 +66,6 @@ class TertiumReader:
 
         self.rssi_enabled = rssi_enabled
         self._initial_sync_done = False
-        self._stop_listening = None
 
     def open(self):
         """Opens the serial port and waits for initialization."""
@@ -462,7 +457,11 @@ class TertiumReader:
         while (time.time() - start) < (timeout_ms/1000 + 1.0):
             line = self.ser.read_until(b'\r').decode('ascii').strip()
             if not line.startswith("$:"): continue
-            if len(line) <= 12 and line[6:8] == self.RET_TIMEOUT: break
+            # Frame finale dell'inventario ($:08 00 [retcode][numtag], ~10 caratteri): la
+            # scansione è conclusa (successo, errore o timeout) -> esci subito senza aspettare
+            # il timeout a muro. I frame dei tag sono molto più lunghi (>12 caratteri).
+            if len(line) <= 12:
+                break
             
             if len(line) > 12:
                 tag_data = line[10:]
@@ -633,51 +632,3 @@ class TertiumReader:
         else:
             self.logger.warning(f"Temperature read failed or timed out. Response: {resp}")
         return None
-    
-    def listen_async(self, callback=None):
-        """
-        Continuously listens to the serial port for asynchronous data.
-        
-        Args:
-            callback (function): Function to call when a tag is detected.
-        """
-
-        # TODO da spostare altrove
-        if not getattr(self, '_initial_sync_done', False):
-            raise TertiumError("Hardware not synced. Call open() and ensure initialization is complete before operating.")
-
-        self.logger.info("Listening for asynchronous data... (Press Ctrl+C to stop)")
-        self._stop_listening = False
-        try:
-            while not self._stop_listening:
-                if self.ser.in_waiting > 0:
-                    try:
-                        line = self.ser.read_until(b'\r').decode('ascii').strip()
-                        if line.startswith("$:") and len(line) > 12:
-                            tag_data = line[10:]
-                            
-                            # Rimuovi il prefisso PC (i primi 4 caratteri esadecimali) se 
-                            # l'id_format configurato include il PC nella risposta.
-                            if getattr(self, 'id_format', "00") in ["02", "03", "07"] and len(tag_data) > 4:
-                                tag_data = tag_data[4:]
-                                
-                            if self.rssi_enabled:
-                                # Nessun troncamento: passiamo il tag_data integro
-                                tag_payload = (tag_data, None)
-                            else:
-                                tag_payload = tag_data
-                                
-                            if callback: 
-                                callback(tag_payload)
-                            else: 
-                                self.logger.info(f"[ASYNC] {tag_payload}")
-                    except Exception as e:
-                        self.logger.error(f"Async error: {e}")
-                time.sleep(0.01)
-                
-        except KeyboardInterrupt:
-            self.logger.info("Asynchronous listening stopped by the user.")
-            
-    def stop_listening(self):
-        """Signals the async listener loop to stop."""
-        self._stop_listening = True

@@ -8,9 +8,12 @@ Created on Thu May 21 10:32:38 2026
 import logging
 import time
 import argparse
+import sys
+import pathlib
 
 # Import the class and exceptions from your tertium_serial_handler.py file
-from tertium_serial_handler import TertiumReader, TertiumError
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+from src.tertium_serial_handler import TertiumReader, TertiumError
 
 def main(power, rssi):
     

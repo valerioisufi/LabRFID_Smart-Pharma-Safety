@@ -21,7 +21,7 @@ class Middleware:
     CABINET_POLL_SECONDS = 2
     CABINET_ABSENT_THRESHOLD = 2
 
-    def __init__(self, port: str = "COM3") -> None:
+    def __init__(self, port: str = "") -> None:
         self.state_machine: StateMachine = StateMachine()
         self.reader_manager: ReaderManager = ReaderManager(port=port)
         
@@ -86,6 +86,17 @@ class Middleware:
 
     def stop_monitoring(self):
         self.is_monitoring = False
+        # Cancella il task di scansione per evitare loop sovrapposti con start/stop ravvicinati.
+        # Se a chiamare è il loop stesso (es. il ramo DESK che si auto-ferma) non lo si cancella,
+        # perché sta già uscendo da solo con un break.
+        try:
+            current = asyncio.current_task()
+        except RuntimeError:
+            current = None
+        task = self.periodic_task
+        if task and not task.done() and task is not current:
+            task.cancel()
+            self.periodic_task = None
         self._trigger_state_update()
 
     def start_batch(self, data: dict):
@@ -217,6 +228,13 @@ class Middleware:
                 raw_tags = await self._run_blocking(self.reader_manager.read_tags)
                 if raw_tags:
                     results = self.process_reads(raw_tags, self.current_read_point)
+                    # Feedback visivo dell'esito sul lettore: rosso se c'è un alert, verde se ok.
+                    has_alert = any(r["status"] == "ALERT" for r in results)
+                    await self._run_blocking(
+                        self.reader_manager.reader.set_led,
+                        red_status="FF" if has_alert else "00",
+                        green_status="00" if has_alert else "FF",
+                    )
                     if self.on_scan_results:
                         self.on_scan_results(results)
                     self._trigger_state_update()
@@ -233,7 +251,8 @@ class Middleware:
         return results
 
     def get_all_events(self) -> list[dict[str, Any]]:
-        self.state_machine.load_db()
+        # Gli eventi sono già in memoria e sempre aggiornati: non serve rileggere il DB da disco
+        # (lo si faceva a ogni broadcast WebSocket, con spreco e rischio di race con save_db).
         return self.state_machine.events
 
     def get_kpis(self) -> dict[str, int]:

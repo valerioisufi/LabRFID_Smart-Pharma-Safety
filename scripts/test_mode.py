@@ -1,5 +1,10 @@
+import sys
+import pathlib
 import logging
-from tertium_serial_handler import TertiumReader
+
+# Script diagnostico: aggiunge la root del progetto al path per importare il package src.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+from src.tertium_serial_handler import TertiumReader
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - [%(levelname)s] %(message)s')
 

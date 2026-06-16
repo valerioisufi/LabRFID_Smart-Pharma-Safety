@@ -73,8 +73,9 @@ app: FastAPI = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(Path(__file__).resolve().parent / "static")), name="static")
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
 
-# Stato Globale dell'Applicazione
-default_port: str = "COM3"
+# Stato Globale dell'Applicazione: auto-rileva la prima porta seriale disponibile (cross-platform),
+# così il default funziona su macOS/Linux (/dev/cu.usbserial-*, /dev/ttyUSB*) e non solo su Windows.
+default_port: str = next((p.device for p in serial.tools.list_ports.comports()), "")
 
 # Gestore delle connessioni WebSocket (mantiene vive le connessioni con i client web)
 class ConnectionManager:

@@ -14,9 +14,7 @@ DESK_RSSI_THRESHOLD_DBM = -25
 class ReaderManager:
     """Livello di astrazione hardware (HAL) che gestisce la connessione con il lettore RFID."""
     def __init__(self, port: Optional[str] = None) -> None:
-        if port is None:
-            port = "COM3"
-        self.port: str = port
+        self.port: str = port or ""
         self.reader: Optional[TertiumReader] = None
         self.async_thread: Optional[threading.Thread] = None
         
