@@ -148,6 +148,8 @@ function renderKPIs(kpis, context) {
     } else if (context === "SMART_CABINET") {
         kpiData = [
             { label: "In Cabinet", value: kpis.in_cabinet },
+            { label: "Awaiting Checkout", value: kpis.awaiting_checkout },
+            { label: "Missing", value: kpis.missing },
             { label: "Expired Alerts", value: kpis.expired }
         ];
     } else if (context === "DESK") {

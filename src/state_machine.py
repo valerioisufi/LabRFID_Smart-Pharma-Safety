@@ -11,6 +11,37 @@ logger = logging.getLogger(__name__)
 DB_PATH = str(Path(__file__).resolve().parent.parent / "data" / "database.json")
 BLACKLIST_PATH = str(Path(__file__).resolve().parent.parent / "data" / "blacklisted_batches.json")
 
+# Ogni punto di lettura impone un'azione e lo stato obiettivo che la lettura tenta di assegnare.
+READ_POINT_RULES: dict[str, tuple[str, str]] = {
+    "PACKAGING_LINE":  ("PACK",  "PACKED"),
+    "SMART_TRUCK":     ("LOAD",  "DISTRIBUTING"),
+    "SMART_CABINET":   ("STORE", "STORED"),
+    "DESK":            ("SELL",  "DISPENSED"),
+    "WASTE_CONTAINER": ("THROW", "DISPOSED"),
+}
+
+# Stati raggiungibili a partire da ciascuno stato corrente (fonte di verità per le transizioni
+# guidate dai PUNTI DI LETTURA, cioè process_read). Lo smaltimento (DISPOSED) è sempre lecito.
+# Due transizioni NON passano dai punti di lettura e quindi non compaiono qui:
+#   STORED -> AWAITING_CHECKOUT  (uscita dall'armadio, gestita da process_removal)
+#   AWAITING_CHECKOUT -> MISSING (grace period scaduto, gestita da reconcile_pending_checkouts)
+# AWAITING_CHECKOUT e MISSING possono tornare a STORED (rimessi in armadio) o essere venduti.
+ALLOWED_TRANSITIONS: dict[str, set[str]] = {
+    "PACKED":            {"DISTRIBUTING", "DISPOSED"},
+    "DISTRIBUTING":      {"STORED", "DISPOSED"},
+    "STORED":            {"DISPENSED", "DISPOSED"},
+    "AWAITING_CHECKOUT": {"STORED", "DISPENSED", "DISPOSED"},
+    "MISSING":           {"STORED", "DISPENSED", "DISPOSED"},
+    "DISPENSED":         {"DISPOSED"},
+    "DISPOSED":          set(),
+}
+
+# Tempo concesso tra l'uscita dall'armadio (AWAITING_CHECKOUT) e il passaggio in cassa, oltre il
+# quale l'articolo viene considerato un ammanco (MISSING). Tiene conto del fatto che dal prelievo
+# alla cassa trascorre del tempo: evita falsi allarmi sulle vendite regolari.
+CHECKOUT_GRACE_SECONDS = 60
+
+
 class StateMachine:
     """
     Gestisce lo stato del ciclo di vita dei farmaci (Asset) e mantiene lo storico degli eventi.
@@ -57,7 +88,7 @@ class StateMachine:
             self.assets = {}
             self.events = []
             return
-            
+
         try:
             with open(DB_PATH, "r") as f:
                 data = json.load(f)
@@ -88,100 +119,70 @@ class StateMachine:
         asset = self.assets.get(epc)
         if asset:
             return asset
-            
+
         # Fallback: cerca se questo EPC è l'oldEpc di qualche asset.
         # Questo accade se la scrittura fisica sul tag RFID è fallita ma il db ha registrato il nuovo EPC.
         for a in self.assets.values():
             if a.get("oldEpc") == epc:
                 return a
-                
+
         return None
 
     def process_read(self, epc: str, read_point: str) -> dict[str, Any]:
         """
-        Logica centrale della Macchina a Stati. Valuta la lettura e applica le regole di business.
-        Ritorna un dizionario con: {'status': 'OK'/'ALERT', 'message': '...', 'asset': asset_dict}
+        Logica centrale della macchina a stati. Valuta una lettura applicando, nell'ordine:
+        controlli di qualità (scadenza/lotto ritirato), re-letture idempotenti, blocco della
+        vendita al DESK e la tabella delle transizioni consentite (ALLOWED_TRANSITIONS).
+
+        Ritorna sempre un dizionario {'status': 'OK'|'ALERT', 'message': str, 'asset': dict|None}.
         """
         asset = self.get_asset(epc)
+        logger.debug(f"Processing read for EPC {epc} at {read_point}. Asset found: {bool(asset)}")
 
-        logger.debug(f"Processing read for EPC: {epc} at {read_point}. Asset found: {bool(asset)}")
-        logger.debug(f"Asset details: {asset}")
-        
         if not asset:
-            return {
-                "status": "ALERT",
-                "message": f"Asset sconosciuto ({epc}). Forse un tag non commissionato?",
-                "asset": None
-            }
+            return self._result("ALERT", f"Asset sconosciuto ({epc}). Forse un tag non commissionato?", None)
 
-        # Il farmaco esiste. Verifico le regole di validità (es. scadenza o ritiri).
-        current_state = asset.get("currentState")
-        is_expired = self._is_expired(asset.get("expiryDate"))
-        is_blacklisted = asset.get("batch") in self.blacklisted_batches
-        
-        alert_msgs = []
-        if is_expired:
-            alert_msgs.append("FARMACO SCADUTO!")
-        if is_blacklisted:
-            alert_msgs.append("LOTTO RITIRATO!")
+        rule = READ_POINT_RULES.get(read_point)
+        if rule is None:
+            return self._result("ALERT", f"Punto di lettura non gestito: {read_point}.", asset)
+        action, target = rule
 
-        # Determina il nuovo stato logico in base al punto in cui è avvenuta la lettura fisica
-        new_state = current_state
-        action = "READ"
+        current = asset.get("currentState")
+        quality_alerts = self._quality_alerts(asset)
 
-        if read_point == "PACKAGING_LINE":
-            new_state = "PACKED"
-            action = "PACK"
-            
-        elif read_point == "SMART_TRUCK":
-            new_state = "DISTRIBUTING"
-            action = "LOAD"
-            if current_state not in ["PACKED", "DISTRIBUTING"]:
-                alert_msgs.append("Transizione anomala: L'asset non è stato registrato sulla linea di confezionamento prima di essere caricato sul camion.")
-                
-        elif read_point == "SMART_CABINET":
-            new_state = "STORED"
-            action = "STORE"
-            if current_state not in ["DISTRIBUTING", "STORED"]:
-                alert_msgs.append("Transizione anomala: Arrivato in armadio senza transito.")
+        # (1) Re-lettura confermativa: l'asset è già nello stato che questo punto imporrebbe.
+        #     Nessuna transizione e nessun evento registrato: gli eventuali alert di qualità
+        #     vengono solo mostrati a video, per non intasare lo storico durante il polling.
+        if target == current:
+            message = " | ".join(quality_alerts) if quality_alerts else "Lettura confermata (stato invariato)."
+            return self._result("ALERT" if quality_alerts else "OK", message, asset)
 
-        elif read_point == "DESK":
-            new_state = "DISPENSED"
-            action = "SELL"
-            if current_state != "STORED":
-                alert_msgs.append("ATTENZIONE: Prelevato senza passare per lo Smart Cabinet!")
-                
-        elif read_point == "WASTE_CONTAINER":
-            new_state = "DISPOSED"
-            action = "THROW"
+        # (2) Verifica se la lettura va BLOCCATA (stato invariato) e perché.
+        block_reason = None
+        if read_point == "DESK" and quality_alerts:
+            # Blocco vendita: non si dispensa un farmaco scaduto o di un lotto ritirato.
+            block_reason = "VENDITA BLOCCATA: farmaco non vendibile"
+        elif target not in ALLOWED_TRANSITIONS.get(current, set()):
+            # Transizione non prevista dal ciclo di vita (passaggio saltato, ritorno indietro,
+            # asset già smaltito, vendita senza passare per lo Smart Cabinet, ...).
+            block_reason = f"Transizione non consentita: {current} -> {target}"
 
-        # Update asset
-        asset["currentState"] = new_state
-        asset["lastUpdate"] = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat() + "Z"
-        self.assets[epc] = asset
-        
-        # Log event
-        self._log_event(epc, read_point, action, new_state, alert_msgs)
-        self.save_db()
+        if block_reason:
+            alerts = quality_alerts + [block_reason]
+            # Lo stato NON cambia; l'evento viene registrato come semplice READ con la motivazione.
+            self._apply(asset, epc, read_point, "READ", current, alerts)
+            return self._result("ALERT", " | ".join(alerts), asset)
 
-        status = "ALERT" if alert_msgs else "OK"
-        message = " | ".join(alert_msgs) if alert_msgs else "Transizione corretta."
-
-        return {
-            "status": status,
-            "message": message,
-            "asset": asset
-        }
-
-    def set_serial_counter(self, offset):
-        try:
-            self.serial_counter = int(offset)
-            self.save_db()
-        except ValueError:
-            pass
+        # (3) Transizione valida: applica azione e nuovo stato.
+        self._apply(asset, epc, read_point, action, target, quality_alerts)
+        message = " | ".join(quality_alerts) if quality_alerts else "Transizione corretta."
+        return self._result("ALERT" if quality_alerts else "OK", message, asset)
 
     def commission_asset(self, epc, gtin, batch, expiry_date, aic, old_epc=None):
-        """Official Commissioning with DSGTIN-128 encoding and GS1 metadata."""
+        """
+        Commissioning: crea l'asset con i metadati GS1 e ne registra la nascita.
+        L'evento viene loggato come azione PACK (stato PACKED), coerente con la linea.
+        """
         new_asset = {
             "epc": epc,
             "gtin": gtin,
@@ -190,29 +191,129 @@ class StateMachine:
             "aic": aic,
             "serialNumber": self.serial_counter,
             "currentState": "PACKED",
-            "lastUpdate": datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat() + "Z",
+            "lastUpdate": self._now(),
             "oldEpc": old_epc
         }
-        
         self.assets[epc] = new_asset
         self.serial_counter += 1
-        self._log_event(epc, "PACKAGING_LINE", "COMMISSIONING", "PACKED", [])
-        self.save_db()
-        return {
-            "status": "OK",
-            "message": "Asset commissionato e registrato su RFID fisico.",
-            "asset": new_asset
-        }
+        self._apply(new_asset, epc, "PACKAGING_LINE", "PACK", "PACKED", [])
+        return self._result("OK", "Asset commissionato e registrato su RFID fisico.", new_asset)
 
-    def _log_event(self, epc, read_point, action, new_state, alert_msgs):
+    def process_removal(self, epc: str, read_point: str) -> Optional[dict[str, Any]]:
+        """
+        Valuta la SCOMPARSA di un tag dal campo dello Smart Cabinet. A differenza di
+        process_read, qui l'evento è "il tag non c'è più".
+
+        Uscire dall'armadio NON è (ancora) un furto: tra il prelievo e la cassa passa del
+        tempo. Quindi un articolo STORED che sparisce passa allo stato transitorio
+        AWAITING_CHECKOUT ("uscito, in attesa di cassa"), senza allarme. Sarà
+        reconcile_pending_checkouts() a promuoverlo ad ammanco (MISSING) se non passa in
+        cassa entro il grace period. Se l'articolo è già DISPENSED, il prelievo è legittimo.
+        """
+        asset = self.get_asset(epc)
+        if not asset:
+            return None
+
+        current = asset.get("currentState")
+        if current == "STORED":
+            self._apply(asset, epc, read_point, "REMOVE", "AWAITING_CHECKOUT", [])
+            return self._result("OK", "Articolo uscito dall'armadio, in attesa di cassa.", asset)
+
+        return self._result("OK", "Articolo prelevato dall'armadio.", asset)
+
+    def reconcile_pending_checkouts(self, grace_seconds: int = CHECKOUT_GRACE_SECONDS) -> list[dict[str, Any]]:
+        """
+        Promuove ad ammanco (MISSING) gli articoli usciti dall'armadio (AWAITING_CHECKOUT) che
+        non sono passati in cassa entro grace_seconds. Va richiamata periodicamente (dal loop
+        dello Smart Cabinet). Ritorna i risultati dei soli articoli appena segnalati.
+        """
+        results = []
+        now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+        for epc, asset in list(self.assets.items()):
+            if asset.get("currentState") != "AWAITING_CHECKOUT":
+                continue
+            removed_at = self._parse_ts(asset.get("lastUpdate"))
+            if removed_at is None:
+                continue
+            if (now - removed_at).total_seconds() >= grace_seconds:
+                alerts = ["AMMANCO: uscito dall'armadio senza passare per la cassa"]
+                self._apply(asset, epc, "SMART_CABINET", "REMOVE", "MISSING", alerts)
+                results.append(self._result("ALERT", alerts[0], asset))
+        return results
+
+    def _apply(self, asset: dict[str, Any], epc: str, read_point: str,
+               action: str, new_state: str, alerts: list[str]) -> None:
+        """
+        Punto unico in cui l'esito di una lettura diventa persistente: aggiorna lo stato
+        dell'asset, registra l'evento nello storico e salva su disco. È usato sia da
+        process_read sia da commission_asset, così il logging resta una responsabilità
+        della StateMachine (e non viene duplicato nei chiamatori).
+
+        Anti-flood: non registra un evento identico all'ultimo già presente per lo stesso
+        EPC. Durante il polling continuo, una lettura bloccata ripetuta non riempie lo storico.
+        """
+        if self._is_duplicate_event(epc, read_point, action, new_state, alerts):
+            return
+        asset["currentState"] = new_state
+        asset["lastUpdate"] = self._now()
+        self.assets[epc] = asset
+        self._log_event(epc, read_point, action, new_state, alerts)
+        self.save_db()
+
+    def _is_duplicate_event(self, epc: str, read_point: str, action: str,
+                            new_state: str, alerts: list[str]) -> bool:
+        """True se l'ultimo evento registrato per questo EPC è identico a quello in arrivo."""
+        for event in reversed(self.events):
+            if event.get("epc") == epc:
+                return (event.get("readPoint") == read_point
+                        and event.get("action") == action
+                        and event.get("newState") == new_state
+                        and event.get("alerts") == alerts)
+        return False
+
+    def _quality_alerts(self, asset: dict[str, Any]) -> list[str]:
+        """Alert di qualità validi a qualsiasi punto di lettura: scadenza e lotto ritirato."""
+        alerts = []
+        if self._is_expired(asset.get("expiryDate")):
+            alerts.append("FARMACO SCADUTO!")
+        if asset.get("batch") in self.blacklisted_batches:
+            alerts.append("LOTTO RITIRATO!")
+        return alerts
+
+    @staticmethod
+    def _result(status: str, message: str, asset: Optional[dict[str, Any]]) -> dict[str, Any]:
+        return {"status": status, "message": message, "asset": asset}
+
+    @staticmethod
+    def _now() -> str:
+        return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat() + "Z"
+
+    @staticmethod
+    def _parse_ts(ts: Optional[str]) -> Optional[datetime.datetime]:
+        """Converte un timestamp prodotto da _now() (ISO + 'Z') in datetime naive UTC."""
+        if not ts:
+            return None
+        try:
+            return datetime.datetime.fromisoformat(ts[:-1] if ts.endswith("Z") else ts)
+        except ValueError:
+            return None
+
+    def set_serial_counter(self, offset):
+        try:
+            self.serial_counter = int(offset)
+            self.save_db()
+        except ValueError:
+            pass
+
+    def _log_event(self, epc, read_point, action, new_state, alerts):
         event = {
             "eventId": str(uuid.uuid4()),
             "epc": epc,
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat() + "Z",
+            "timestamp": self._now(),
             "readPoint": read_point,
             "action": action,
             "newState": new_state,
-            "alerts": alert_msgs
+            "alerts": alerts
         }
         self.events.append(event)
 
@@ -221,12 +322,12 @@ class StateMachine:
             return False
         try:
             expiry_date = datetime.datetime.strptime(expiry_date_str, "%Y-%m-%d")
-            
+
             if self.simulated_date:
                 current_eval_date = datetime.datetime.strptime(self.simulated_date, "%Y-%m-%d")
             else:
                 current_eval_date = datetime.datetime.now()
-                
+
             return current_eval_date > expiry_date
         except:
             return False
@@ -239,6 +340,8 @@ class StateMachine:
             "packed": sum(1 for a in assets_list if a.get("currentState") == "PACKED"),
             "distributing": sum(1 for a in assets_list if a.get("currentState") == "DISTRIBUTING"),
             "in_cabinet": sum(1 for a in assets_list if a.get("currentState") == "STORED"),
+            "awaiting_checkout": sum(1 for a in assets_list if a.get("currentState") == "AWAITING_CHECKOUT"),
+            "missing": sum(1 for a in assets_list if a.get("currentState") == "MISSING"),
             "dispensed": sum(1 for a in assets_list if a.get("currentState") == "DISPENSED"),
             "disposed": sum(1 for a in assets_list if a.get("currentState") == "DISPOSED"),
             "expired": sum(1 for a in assets_list if self._is_expired(a.get("expiryDate")))

@@ -569,13 +569,16 @@ class TertiumReader:
             params = f"{timeout_hex}{epc_param}{mem_bank}{address}{block_num}{data}{acc_password}"
         
         resp = self.send_command(self.CMD_WRITE_BANK, params)
-        
-        if resp and len(resp) >= 6 and resp[4:6] == self.RET_SUCCESS:
-            self.logger.info("Write successfull")
-            return resp[4:6]
-        
+
+        # Risposta WRITE: $: [LL] [seq] [retcode] CR -> il codice di ritorno è in [6:8].
+        # Gli indici [4:6] sono il campo Sequence (sempre "00"), non l'esito: leggerli
+        # faceva risultare la scrittura riuscita anche in caso di errore o timeout.
+        if resp and len(resp) >= 8 and resp[6:8] == self.RET_SUCCESS:
+            self.logger.info("Write successful")
+            return resp[6:8]
+
         self.logger.warning(f"Write failed with response: {resp}")
-        
+
         return None
 
     def read_temperature(self, epc, timeout_ms=1000, tag_type="01", tag_subtype="00", password="", verbose=False):
