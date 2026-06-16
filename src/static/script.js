@@ -273,6 +273,15 @@ async function stopBatch() {
     await fetch('/api/stop_batch', { method: 'POST' });
 }
 
+async function resetSimulation() {
+    if (!confirm("Sei sicuro? Verranno cancellati TUTTI gli asset e gli eventi dal database. L'operazione è irreversibile.")) {
+        return;
+    }
+    await fetch('/api/reset', { method: 'POST' });
+    // Pulisce anche le card dei risultati a video (lo stato del DB arriva via WebSocket)
+    document.getElementById('results-container').innerHTML = '';
+}
+
 async function applySimulationSettings() {
     const simDate = document.getElementById('sim-date').value;
     const simBatches = document.getElementById('sim-batches').value;

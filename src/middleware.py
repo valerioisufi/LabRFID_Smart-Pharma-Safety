@@ -124,6 +124,15 @@ class Middleware:
         self.is_monitoring = False
         self._trigger_state_update()
 
+    def reset_simulation(self) -> None:
+        """Ferma il monitoraggio e azzera il database (asset + eventi), riportando l'app pulita."""
+        self.stop_monitoring()
+        self.active_batch_config = None
+        self.processed_in_batch = set()
+        self.cabinet_presence = {}
+        self.state_machine.reset()
+        self._trigger_state_update()
+
     async def _run_blocking(self, func, *args, **kwargs):
         """
         Esegue una chiamata seriale bloccante (inventory, scrittura, beep) in un thread
@@ -219,6 +228,13 @@ class Middleware:
                     if self.on_scan_results:
                         self.on_scan_results(results)
                     self._trigger_state_update()
+                    # Feedback visivo dell'esito sul lettore: rosso se c'è un alert, verde se ok.
+                    has_alert = any(r["status"] == "ALERT" for r in results)
+                    await self._run_blocking(
+                        self.reader_manager.reader.set_led,
+                        red_status="FF" if has_alert else "00",
+                        green_status="00" if has_alert else "FF",
+                    )
                     # Desk reads only ON DEMAND and stops after one successful read event.
                     self.stop_monitoring()
                     break
@@ -228,13 +244,6 @@ class Middleware:
                 raw_tags = await self._run_blocking(self.reader_manager.read_tags)
                 if raw_tags:
                     results = self.process_reads(raw_tags, self.current_read_point)
-                    # Feedback visivo dell'esito sul lettore: rosso se c'è un alert, verde se ok.
-                    has_alert = any(r["status"] == "ALERT" for r in results)
-                    await self._run_blocking(
-                        self.reader_manager.reader.set_led,
-                        red_status="FF" if has_alert else "00",
-                        green_status="00" if has_alert else "FF",
-                    )
                     if self.on_scan_results:
                         self.on_scan_results(results)
                     self._trigger_state_update()

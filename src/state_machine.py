@@ -305,6 +305,18 @@ class StateMachine:
         except ValueError:
             pass
 
+    def reset(self) -> None:
+        """
+        Azzera il database della simulazione: cancella tutti gli asset e lo storico eventi e
+        riporta il contatore seriale a 1. Le impostazioni di simulazione (data simulata e lotti
+        in blacklist) NON vengono toccate.
+        """
+        self.assets = {}
+        self.events = []
+        self.serial_counter = 1
+        self.save_db()
+        logger.info("Database della simulazione azzerato.")
+
     def _log_event(self, epc, read_point, action, new_state, alerts):
         event = {
             "eventId": str(uuid.uuid4()),

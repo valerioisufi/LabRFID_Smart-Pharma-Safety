@@ -202,6 +202,11 @@ async def stop_batch():
     middleware.stop_batch()
     return {"status": "success"}
 
+@app.post("/api/reset")
+async def reset_simulation():
+    middleware.reset_simulation()
+    return {"status": "success"}
+
 @app.post("/api/simulation_settings")
 async def simulation_settings(data: dict):
     simulated_date = data.get("simulated_date")
