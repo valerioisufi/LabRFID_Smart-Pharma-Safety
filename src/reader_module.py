@@ -6,6 +6,11 @@ from src.tertium_serial_handler import TertiumReader
 
 logger = logging.getLogger(__name__)
 
+# Soglia RSSI (dBm) usata al DESK: solo i tag molto vicini (appoggiati sul lettore) la superano,
+# così si dispensa solo l'astuccio messo sul piatto e non gli altri articoli nelle vicinanze.
+# Più la soglia è vicina a -1, più è selettiva. Valore da tarare sull'hardware reale.
+DESK_RSSI_THRESHOLD_DBM = -25
+
 class ReaderManager:
     """Livello di astrazione hardware (HAL) che gestisce la connessione con il lettore RFID."""
     def __init__(self, port: Optional[str] = None) -> None:
@@ -39,21 +44,27 @@ class ReaderManager:
         return self.reader.ser is not None and self.reader.ser.is_open
 
     def configure_for_read_point(self, read_point: str) -> None:
-        """Regola le impostazioni del lettore (potenza e modalità) in base all'ambiente fisico."""
+        """
+        Regola il lettore in base all'ambiente fisico.
+
+        Al DESK la discriminazione è di PROSSIMITÀ: si attiva il filtro RSSI hardware
+        (comando 1C) con soglia alta, così viene letto solo l'astuccio appoggiato sul lettore
+        e non gli altri articoli vicini. Negli altri punti il filtro è disattivato, per leggere
+        tutto il campo. Si usa l'RSSI e non la potenza perché il filtro RSSI ha effetto
+        immediato, mentre il cambio di potenza (SETPOWER) sul RE40 si applica solo dopo un reset
+        del dispositivo: quindi non è adatto a discriminare la distanza a runtime.
+        """
         if not self.reader or not self.is_connected:
             return
-            
+
         self.reader.set_led(green_status="FF")
 
         if read_point == "DESK":
-            self.reader.set_power(0x1B) # Potenza minima
-        elif read_point == "SMART_CABINET" or read_point == "SMART_TRUCK":
-            self.reader.set_power(0x00) # Potenza massima
-        elif read_point == "WASTE_CONTAINER" or read_point == "PACKAGING_LINE":
-            self.reader.set_power(0x0A) # Potenza media
-            
-        # Imposta sempre il lettore in modalità Standard (00)
-        # Sarà il Middleware Python a decidere quando scansionare facendo polling.
+            self.reader.set_rssi_filter(enabled=True, threshold_dbm=DESK_RSSI_THRESHOLD_DBM)
+        else:
+            self.reader.set_rssi_filter(enabled=False)
+
+        # Modalità Normale (00): è il Middleware a decidere quando scansionare facendo polling.
         self.reader.set_current_mode(mode="00")
             
     def read_tags(self) -> list[str]:
