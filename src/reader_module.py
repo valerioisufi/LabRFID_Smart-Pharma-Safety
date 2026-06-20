@@ -80,6 +80,16 @@ class ReaderManager:
         logger.debug(f"Tags letti: {tags}")
         return tags
 
+    def read_tid(self, epc: str) -> Optional[str]:
+        """
+        Legge il TID (banco 02) del tag indirizzato dall'EPC. Il TID è un identificativo
+        univoco scritto in fabbrica e di sola lettura: serve a verificare l'autenticità del tag.
+        Ritorna la stringa esadecimale del TID, oppure None se la lettura fallisce.
+        """
+        if not self.reader or not self.is_connected:
+            return None
+        return self.reader.read_memory(epc, mem_bank="02", address="00", block_num="06")
+
     def write_new_epc(self, new_epc_hex: str) -> tuple[bool, str]:
         """
         Legge il primo tag disponibile nel raggio d'azione e sovrascrive la sua memoria EPC

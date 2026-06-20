@@ -177,11 +177,13 @@ class Middleware:
                         if retcode == "00":
                             self.processed_in_batch.add(tag)
                             self.processed_in_batch.add(new_epc_hex)
-                            
+
+                            # Legge il TID (read-only di fabbrica) e lo lega all'EPC appena scritto.
+                            tid = await self._run_blocking(self.reader_manager.read_tid, new_epc_hex)
                             res = self.state_machine.commission_asset(
                                 epc=new_epc_hex, gtin=self.active_batch_config.get("gtin"),
                                 batch=self.active_batch_config.get("batch"), expiry_date=self.active_batch_config.get("expiry"),
-                                aic=self.active_batch_config.get("aic"), old_epc=tag
+                                aic=self.active_batch_config.get("aic"), old_epc=tag, tid=tid
                             )
                             if self.on_scan_results:
                                 self.on_scan_results([res])
@@ -197,7 +199,9 @@ class Middleware:
                 # Nuovi arrivi: processati una sola volta (immagazzinamento -> STORED).
                 for epc in seen:
                     if epc not in self.cabinet_presence:
-                        results.append(self.state_machine.process_read(epc, "SMART_CABINET"))
+                        # Nuovo arrivo: rilegge il TID per verificare l'autenticità del tag.
+                        tid = await self._run_blocking(self.reader_manager.read_tid, epc)
+                        results.append(self.state_machine.process_read(epc, "SMART_CABINET", tid=tid))
                     self.cabinet_presence[epc] = 0
 
                 # Prelievi: un tag sparito per CABINET_ABSENT_THRESHOLD scansioni è stato rimosso.
@@ -224,7 +228,11 @@ class Middleware:
             elif self.current_read_point == "DESK":
                 raw_tags = await self._run_blocking(self.reader_manager.read_tags)
                 if raw_tags:
-                    results = self.process_reads(raw_tags, self.current_read_point)
+                    # Prima della vendita si verifica l'autenticità: per ogni tag si rilegge il TID.
+                    results = []
+                    for epc in set(raw_tags):
+                        tid = await self._run_blocking(self.reader_manager.read_tid, epc)
+                        results.append(self.state_machine.process_read(epc, "DESK", tid=tid))
                     if self.on_scan_results:
                         self.on_scan_results(results)
                     self._trigger_state_update()

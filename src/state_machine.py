@@ -128,7 +128,7 @@ class StateMachine:
 
         return None
 
-    def process_read(self, epc: str, read_point: str) -> dict[str, Any]:
+    def process_read(self, epc: str, read_point: str, tid: Optional[str] = None) -> dict[str, Any]:
         """
         Logica centrale della macchina a stati. Valuta una lettura applicando, nell'ordine:
         controlli di qualità (scadenza/lotto ritirato), re-letture idempotenti, blocco della
@@ -149,6 +149,12 @@ class StateMachine:
 
         current = asset.get("currentState")
         quality_alerts = self._quality_alerts(asset)
+
+        # Autenticità: l'EPC deve corrispondere al TID (read-only di fabbrica) legato in
+        # commissioning. Se è stato riletto un TID e non combacia, l'EPC è stato clonato su un
+        # altro chip. Si comporta come gli altri alert di qualità: blocca la vendita al DESK.
+        if tid and asset.get("tid") and tid != asset.get("tid"):
+            quality_alerts.append("TAG NON AUTENTICO: TID non corrisponde (possibile EPC clonato)")
 
         # (1) Re-lettura confermativa: l'asset è già nello stato che questo punto imporrebbe.
         #     Nessuna transizione e nessun evento registrato: gli eventuali alert di qualità
@@ -178,10 +184,12 @@ class StateMachine:
         message = " | ".join(quality_alerts) if quality_alerts else "Transizione corretta."
         return self._result("ALERT" if quality_alerts else "OK", message, asset)
 
-    def commission_asset(self, epc, gtin, batch, expiry_date, aic, old_epc=None):
+    def commission_asset(self, epc, gtin, batch, expiry_date, aic, old_epc=None, tid=None):
         """
         Commissioning: crea l'asset con i metadati GS1 e ne registra la nascita.
         L'evento viene loggato come azione PACK (stato PACKED), coerente con la linea.
+        Il TID (identificativo read-only di fabbrica del chip) viene legato all'EPC: servirà a
+        verificare in seguito che il tag sia autentico e che l'EPC non sia stato clonato.
         """
         new_asset = {
             "epc": epc,
@@ -192,7 +200,8 @@ class StateMachine:
             "serialNumber": self.serial_counter,
             "currentState": "PACKED",
             "lastUpdate": self._now(),
-            "oldEpc": old_epc
+            "oldEpc": old_epc,
+            "tid": tid
         }
         self.assets[epc] = new_asset
         self.serial_counter += 1
