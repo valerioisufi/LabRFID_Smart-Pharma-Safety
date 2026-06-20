@@ -8,6 +8,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Access password di sistema (8 hex) usata per proteggere l'EPC in fase di commissioning: dopo la
+# scrittura l'EPC viene lockato (payload 0C020F) e diventa riscrivibile solo presentando questa
+# password. È una costante condivisa del simulatore; in produzione andrebbe in un segreto/config.
+EPC_ACCESS_PASSWORD = "A1B2C3D4"
+
+
 class Middleware:
     """
     Motore degli Eventi (Middleware) / App Controller.
@@ -171,6 +177,17 @@ class Middleware:
                             self.reader_manager.reader.write_memory,
                             epc=tag, data=new_epc_hex, mem_bank="01", address="02", block_num="08", timeout_ms=1000
                         )
+                        # Il tag potrebbe essere protetto da un commissioning precedente (EPC lockato):
+                        # in tal caso la prima scrittura fallisce -> lo sblocco con la password di
+                        # sistema e riprovo. Su un tag mai protetto lo sblocco è innocuo.
+                        if retcode != "00":
+                            await self._run_blocking(
+                                self.reader_manager.reader.unlock_epc, tag, EPC_ACCESS_PASSWORD
+                            )
+                            retcode = await self._run_blocking(
+                                self.reader_manager.reader.write_memory,
+                                epc=tag, data=new_epc_hex, mem_bank="01", address="02", block_num="08", timeout_ms=1000
+                            )
                         await self._run_blocking(self.reader_manager.reader.beep)
                         logger.info(f"Attempting to write new EPC {new_epc_hex} to tag {tag}, write response: {retcode}")
 
@@ -180,6 +197,19 @@ class Middleware:
 
                             # Legge il TID (read-only di fabbrica) e lo lega all'EPC appena scritto.
                             tid = await self._run_blocking(self.reader_manager.read_tid, new_epc_hex)
+
+                            # Protezione EPC: imposta la access password di sistema e blocca il banco
+                            # EPC (lock risbloccabile 0C020F), così l'EPC non è più riscrivibile senza
+                            # la password. Difesa attiva contro la manomissione, complementare al TID.
+                            await self._run_blocking(
+                                self.reader_manager.reader.write_access_password, new_epc_hex, EPC_ACCESS_PASSWORD
+                            )
+                            locked = await self._run_blocking(
+                                self.reader_manager.reader.lock_epc, new_epc_hex, EPC_ACCESS_PASSWORD
+                            )
+                            if locked != "00":
+                                logger.warning(f"EPC {new_epc_hex} commissionato ma NON protetto (lock fallito: {locked}).")
+
                             res = self.state_machine.commission_asset(
                                 epc=new_epc_hex, gtin=self.active_batch_config.get("gtin"),
                                 batch=self.active_batch_config.get("batch"), expiry_date=self.active_batch_config.get("expiry"),
