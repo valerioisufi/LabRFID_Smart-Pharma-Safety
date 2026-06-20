@@ -32,6 +32,7 @@ class TertiumReader:
     CMD_WRITE_ID = "12"
     CMD_READ_BANK = "13"
     CMD_WRITE_BANK = "14"
+    CMD_LOCK = "15"
     CMD_READ_TEMP = "1B"
     CMD_SET_RSSI_FILTER = "1C" # RE-40 Specific
     CMD_SET_ID_FILTER = "1D"   # RE-40 Specific
@@ -40,6 +41,12 @@ class TertiumReader:
     
     RET_SUCCESS = "00"
     RET_TIMEOUT = "0D"
+
+    # Payload del comando LOCK (15) per il banco EPC (6 hex digit; l'ultimo nibble è sempre F).
+    # Il bit 'permalock' distingue il lock con password (reversibile) dal blocco definitivo.
+    LOCK_EPC_PWD = "0C020F"    # EPC riscrivibile solo in secured state (con password) -> RISBLOCCABILE
+    LOCK_EPC_OPEN = "0C000F"   # EPC sbloccato (riscrivibile da chiunque)
+    LOCK_EPC_PERMA = "0C030F"  # EPC permalock: mai più riscrivibile (IRREVERSIBILE)
 
     def __init__(self, port: str, baudrate: int = 38400, timeout: int = 3, rssi_enabled: bool = False, logger: Optional[logging.Logger] = None) -> None:
         """
@@ -579,6 +586,68 @@ class TertiumReader:
         self.logger.warning(f"Write failed with response: {resp}")
 
         return None
+
+    def lock_memory(self, epc, payload, acc_password="", timeout_ms=500):
+        """
+        Esegue il comando LOCK (15): protegge dalla scrittura un banco di memoria del tag.
+
+        Args:
+            epc (str): EPC del tag bersaglio (il prefisso PC viene aggiunto automaticamente se
+                       l'id_format configurato lo richiede).
+            payload (str): 6 hex digit che descrivono il lock (vedi LOCK_EPC_*).
+            acc_password (str): access password a 8 hex; necessaria se il banco va in secured state.
+            timeout_ms (int): timeout del comando.
+
+        Returns:
+            str: retcode "00" in caso di successo, altrimenti None.
+        """
+        if not getattr(self, '_initial_sync_done', False):
+            raise TertiumError("Hardware not synced. Call open() and ensure initialization is complete before operating.")
+
+        timeout_hex = f"{int(timeout_ms / 100):02X}"
+
+        if getattr(self, 'id_format', "00") in ["02", "03", "07"]:
+            pc_word = f"{(len(epc) // 4) << 11:04X}"
+            epc_param = f"{pc_word}{epc}"
+        else:
+            epc_param = epc
+
+        params = f"{timeout_hex}{epc_param}{payload}{acc_password}"
+        resp = self.send_command(self.CMD_LOCK, params)
+
+        if resp and len(resp) >= 8 and resp[6:8] == self.RET_SUCCESS:
+            self.logger.info(f"Lock OK (payload {payload}) sul tag {epc[-6:]}")
+            return resp[6:8]
+
+        self.logger.warning(f"Lock failed with response: {resp}")
+        return None
+
+    def lock_epc(self, epc, acc_password, permalock=False, timeout_ms=500):
+        """
+        Protegge il banco EPC dalla riscrittura. Di default è un lock RISBLOCCABILE: l'EPC resta
+        modificabile solo presentando la access password (secured state); con permalock=True il
+        blocco è permanente e irreversibile (sconsigliato per un simulatore riutilizzabile).
+        Richiede che la access password sia già stata impostata sul tag (write_access_password).
+        """
+        payload = self.LOCK_EPC_PERMA if permalock else self.LOCK_EPC_PWD
+        return self.lock_memory(epc, payload, acc_password=acc_password, timeout_ms=timeout_ms)
+
+    def unlock_epc(self, epc, acc_password, timeout_ms=500):
+        """
+        Rimuove il lock dal banco EPC: torna riscrivibile da chiunque. Richiede la access password
+        (il tag è in secured state). Funziona solo se l'EPC NON è stato permalockato.
+        """
+        return self.lock_memory(epc, self.LOCK_EPC_OPEN, acc_password=acc_password, timeout_ms=timeout_ms)
+
+    def write_access_password(self, epc, password, acc_password="", timeout_ms=1000):
+        """
+        Imposta la Access Password a 32 bit (8 hex) nel banco Reserved (00, parole 2-3). È il
+        prerequisito perché un lock 'con password' abbia senso: di default la password è 00000000
+        e qualunque host può entrare in secured state. acc_password è l'eventuale password attuale,
+        se il banco Reserved è già protetto.
+        """
+        return self.write_memory(epc, data=password, mem_bank="00", address="02",
+                                 block_num="02", timeout_ms=timeout_ms, acc_password=acc_password)
 
     def read_temperature(self, epc, timeout_ms=1000, tag_type="01", tag_subtype="00", password="", verbose=False):
         """
