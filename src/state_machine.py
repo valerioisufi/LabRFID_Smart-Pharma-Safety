@@ -39,7 +39,7 @@ ALLOWED_TRANSITIONS: dict[str, set[str]] = {
 # Tempo concesso tra l'uscita dall'armadio (AWAITING_CHECKOUT) e il passaggio in cassa, oltre il
 # quale l'articolo viene considerato un ammanco (MISSING). Tiene conto del fatto che dal prelievo
 # alla cassa trascorre del tempo: evita falsi allarmi sulle vendite regolari.
-CHECKOUT_GRACE_SECONDS = 60
+CHECKOUT_GRACE_SECONDS = 30
 
 
 class StateMachine:
