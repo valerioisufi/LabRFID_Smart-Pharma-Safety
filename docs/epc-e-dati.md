@@ -12,14 +12,14 @@ esadecimale (32 caratteri per 128 bit) scritta nel banco EPC del tag.
 | Filter | 3 | filtro GS1 (default `1` = Point-of-Sale) |
 | Date Indicator | 4 | `0100` = data di scadenza |
 | Date | 16 | `(anno%100 << 9) | (mese << 5) | giorno` |
-| GTIN-14 | 44 | il GTIN come intero |
-| Encoding Indicator | 3 | `1` = seriale esadecimale (4 bit/char), `4` = ASCII (7 bit/char) |
-| Length Indicator | 5 | lunghezza del seriale |
-| Serial | variabile | il numero di serie |
+| GTIN-14 | 56 | le 14 cifre in BCD (4 bit per cifra), conforme a GS1 TDS 2.0 |
+| Encoding Indicator | 3 | `001` = upper-case hexadecimal (4 bit/cifra) |
+| Length Indicator | 5 | numero di cifre hex del seriale (default 8) |
+| Serial | variabile | il contatore in esadecimale maiuscolo, con zeri iniziali a larghezza fissa |
 | Padding | — | zeri fino a 128 bit (o successivo multiplo di 16) |
 
-Parte fissa = 84 bit + seriale. Esempio: GTIN `00800123456789`, serial `00000001`, scad. 2027-12-31
-→ `FB14379F0BA4B130D152110000000000`.
+Parte fissa = 96 bit + seriale. Esempio: GTIN `00800123456789`, serial `00000001`, scad. 2027-12-31
+→ `FB14379F008001234567892800000001` (essendo BCD, le cifre del GTIN si leggono in chiaro nell'hex).
 
 ## Dati del tag nel database
 Persistiti in `data/database.json`:

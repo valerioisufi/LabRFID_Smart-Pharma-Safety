@@ -3,7 +3,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def encode_dsgtin128(gtin: str, serial: str, expiry_date: datetime.date, filter_value: int = 1) -> str:
+def encode_dsgtin128(gtin: str, serial, expiry_date: datetime.date, filter_value: int = 1,
+                     serial_hex_digits: int = 8) -> str:
     """
     Codifica un DSGTIN+ (Date-prioritized SGTIN) a 128 bit.
     Questo formato è ideale per la filiera dei deperibili, in quanto espone la data
@@ -11,30 +12,26 @@ def encode_dsgtin128(gtin: str, serial: str, expiry_date: datetime.date, filter_
 
     Argomenti:
         gtin: Stringa GTIN a 14 cifre.
-        serial: Numero seriale (stringa esadecimale o alfanumerica).
+        serial: Valore numerico del seriale (il contatore). Viene codificato come esadecimale
+                maiuscolo a larghezza fissa con zeri iniziali (vedi serial_hex_digits).
         expiry_date: Data di scadenza.
         filter_value: Valore di filtro (default 1 per Point-of-Sale).
+        serial_hex_digits: Numero di cifre esadecimali del seriale (default 8 = 32 bit). Con il
+                GTIN a 56 bit, 8 cifre producono un EPC di esattamente 128 bit senza padding.
 
     Ritorna:
         Una stringa esadecimale di 32 caratteri che rappresenta l'EPC a 128 bit.
     """
     gtin = str(gtin).zfill(14)
-    serial = str(serial).strip().upper()
-    length_ind = len(serial)
 
-    # Scegliamo l'Encoding Indicator in base al contenuto del seriale
-    try:
-        # Se è un esadecimale valido, usiamo UC Hex (Indicator 1, 4 bit per char)
-        serial_val = int(serial, 16)
-        enc_ind = 1
-        bits_per_char = 4
-    except ValueError:
-        # Altrimenti usiamo 7-bit ASCII (Indicator 4, 7 bit per char)
-        enc_ind = 4
-        bits_per_char = 7
-        serial_val = 0
-        for char in serial:
-            serial_val = (serial_val << 7) | ord(char)
+    # Serial Number: codifica "variable-length upper case hexadecimal" (Encoding Indicator 1 = 001,
+    # 4 bit per cifra) con zeri iniziali a larghezza fissa. Il seriale in ingresso è il valore
+    # numerico del contatore, reso come esadecimale maiuscolo zero-padded a serial_hex_digits cifre.
+    serial_val = int(serial)
+    serial = format(serial_val, f"0{serial_hex_digits}X")
+    length_ind = len(serial)
+    enc_ind = 1
+    bits_per_char = 4
 
     # 1. Header (8 bit) per DSGTIN+ è 11111011 (0xFB)
     epc = 0xFB
@@ -60,8 +57,13 @@ def encode_dsgtin128(gtin: str, serial: str, expiry_date: datetime.date, filter_
     date_bits = (year << 9) | (month << 5) | day
     epc = (epc << 16) | date_bits
 
-    # 6. GTIN-14 (44 bit) come intero
-    epc = (epc << 44) | int(gtin)
+    # 6. GTIN-14 (56 bit) in BCD: ogni cifra decimale è un nibble da 4 bit. Conforme a GS1 TDS 2.0,
+    #    che per i "+schemi" (SGTIN+/DSGTIN+) abbandona la partizione e codifica il GTIN-14 a
+    #    lunghezza fissa (14 cifre x 4 bit). Niente rischio di overflow: ogni cifra è indipendente.
+    gtin_bcd = 0
+    for ch in gtin:
+        gtin_bcd = (gtin_bcd << 4) | int(ch)
+    epc = (epc << 56) | gtin_bcd
 
     # 7. Encoding Indicator (3 bit)
     epc = (epc << 3) | enc_ind
@@ -73,7 +75,8 @@ def encode_dsgtin128(gtin: str, serial: str, expiry_date: datetime.date, filter_
     epc = (epc << (length_ind * bits_per_char)) | serial_val
 
     # 10. Padding (riempimento con zeri fino a raggiungere 128 bit, o successivi multipli di 16)
-    current_bits = 84 + (length_ind * bits_per_char)
+    #     Parte fissa = 8+1+3+4+16+56+3+5 = 96 bit, più il seriale variabile.
+    current_bits = 96 + (length_ind * bits_per_char)
     target_bits = max(128, ((current_bits + 15) // 16) * 16)
     padding_bits = target_bits - current_bits
 
